@@ -1,0 +1,21 @@
+import { chromium } from 'playwright';
+const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'];
+const b = await chromium.launch({ headless: true, args: GL });
+const p = await b.newPage({ viewport: { width: 1100, height: 800 } });
+const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
+await p.goto('http://localhost:5188/viewer/74245990',{waitUntil:'load'});
+await p.waitForFunction('window.__api&&window.__api.ready===true',{timeout:15000});
+const nParts = await p.evaluate(()=>window.__api.listParts().length);
+await p.click('#insp-toggle');
+const panelOpen = await p.evaluate(()=>document.getElementById('insp-panel').classList.contains('open'));
+const rows = await p.$$eval('.insp-row', r=>r.length);
+await p.click('[data-view="front"]');
+await p.check('#insp-wire');
+await p.evaluate(()=>{const s=document.getElementById('insp-explode');s.value=0.35;s.dispatchEvent(new Event('input'));});
+await p.waitForTimeout(500);
+// isolate first part
+const solo = await p.$('.insp-row [data-a=solo]'); if(solo) await solo.click();
+await p.waitForTimeout(400);
+await p.screenshot({ path: 'runs/ui_inspector.png', animations:'disabled', timeout:8000 }).catch(()=>{});
+console.log('parts='+nParts+' panelOpen='+panelOpen+' rows='+rows+' | JS errors: '+(errs.length?errs.slice(0,4).join(' | '):'NONE'));
+await b.close();
