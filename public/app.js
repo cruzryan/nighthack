@@ -134,9 +134,11 @@ function applyResult(r) {
   $('#sCost').textContent = '$' + (r.cost || 0).toFixed(3);
   ['#bOpen', '#bClose', '#bJson', '#bMjcf', '#bTab', '#bPhoto'].forEach(s => $(s).disabled = false);
   // source photo overlay (compare render vs original)
-  const hasPhoto = (r.inputs || r.images || 0) > 0;
+  state.inputs = r.inputs || r.images || 0;
+  const hasPhoto = state.inputs > 0;
+  closeLightbox();
   $('#bPhoto').disabled = !hasPhoto;
-  if (hasPhoto) { $('#refimg').src = `/api/input/${r.sessionId}/0?t=` + Date.now(); $('#refbox').style.display = 'block'; }
+  if (hasPhoto) { $('#refimg').src = inputUrl(0); $('#refbox').style.display = 'block'; }
   else $('#refbox').style.display = 'none';
   // switch left panel into "refine" mode
   $('#firstHint').style.display = 'none'; $('#opts').style.display = 'none';
@@ -153,6 +155,31 @@ const api = () => { try { return $('#frame').contentWindow.__api; } catch { retu
 $('#bOpen').onclick = () => api()?.openAll();
 $('#bClose').onclick = () => api()?.closeAll();
 $('#bPhoto').onclick = () => { const b = $('#refbox'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; };
+
+// ---------- source photo lightbox ----------
+const lb = $('#lightbox'), lbStamp = Date.now();
+state.inputs = 0; state.shot = 0;
+const inputUrl = i => `/api/input/${state.sessionId}/${i}?t=${lbStamp}`;
+function showShot(i) {
+  const n = Math.max(1, state.inputs);
+  state.shot = (i % n + n) % n;
+  $('#lbImg').src = inputUrl(state.shot);
+  $('#lbCount').textContent = n > 1 ? `${state.shot + 1} / ${n}` : '';
+  ['#lbPrev', '#lbNext'].forEach(s => $(s).style.display = n > 1 ? '' : 'none');
+}
+function openLightbox(i) { if (!state.inputs) return; showShot(i); lb.classList.add('on'); }
+function closeLightbox() { lb.classList.remove('on'); }
+$('#refbox').onclick = () => openLightbox(0);
+$('#lbClose').onclick = closeLightbox;
+$('#lbPrev').onclick = () => showShot(state.shot - 1);
+$('#lbNext').onclick = () => showShot(state.shot + 1);
+lb.onclick = e => { if (e.target === lb) closeLightbox(); };   // click the backdrop to dismiss
+window.addEventListener('keydown', e => {
+  if (!lb.classList.contains('on')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') showShot(state.shot - 1);
+  if (e.key === 'ArrowRight') showShot(state.shot + 1);
+});
 $('#bTab').onclick = () => window.open($('#frame').src, '_blank');
 $('#bJson').onclick = () => dl(`/api/scene/${state.sessionId}`, (state.sessionId || 'scene') + '.json');
 $('#bMjcf').onclick = () => dl(`/api/mjcf/${state.sessionId}`, (state.sessionId || 'scene') + '.xml');
@@ -175,7 +202,7 @@ $('#newScene').onclick = () => {
   $('#sName').textContent = 'No scene loaded';
   $('#sParts').textContent = '0'; $('#sJoints').textContent = '0'; $('#sScore').textContent = '—'; $('#sCost').textContent = '$0';
   ['#bOpen', '#bClose', '#bJson', '#bMjcf', '#bTab', '#bPhoto'].forEach(s => $(s).disabled = true);
-  $('#refbox').style.display = 'none';
+  $('#refbox').style.display = 'none'; state.inputs = 0; closeLightbox();
   $('#newScene').style.display = 'none';
   updateGo(); loadRecent();
 };
