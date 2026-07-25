@@ -8,6 +8,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { visionJSON } from './openai.js';
 import { perceiveRich } from './agents.js';
+import { buildObject } from './build.js';
 import { normalizeScene, worldAABB, groundScene, scaleBodies, offsetBodies, ensureArticulation, fitCamera, countBodies } from './scene.js';
 import { renderStates, standardStates } from './render.js';
 import { bufToDataUri, fileToScaledDataUri } from './imageutil.js';
@@ -139,45 +140,76 @@ function primFor(o, x, z) {
 }
 function kindFor(cat) { return ({ bottle: 'plastic', container: 'plastic', tank: 'metal', pipe: 'metal', beam: 'metal', panel: 'metal', box: 'painted', conveyor: 'metal', light: 'plastic', machine: 'metal', cabinet: 'metal' })[cat] || 'metal'; }
 
-async function buildOne(o, src, model, browser, runDir, allowPerceive) {
+// crop one object out of the source photo, padded a touch, onto a plain square.
+async function cropObject(o, src) {
+  const m = await sharp(src.path).metadata();
+  const padX = (o.bbox[2] - o.bbox[0]) * 0.06, padY = (o.bbox[3] - o.bbox[1]) * 0.06;
+  const x0 = Math.max(0, o.bbox[0] - padX), y0 = Math.max(0, o.bbox[1] - padY);
+  const x1 = Math.min(1, o.bbox[2] + padX), y1 = Math.min(1, o.bbox[3] + padY);
+  return sharp(src.path).extract({ left: Math.floor(x0 * m.width), top: Math.floor(y0 * m.height), width: Math.max(16, Math.floor((x1 - x0) * m.width)), height: Math.max(16, Math.floor((y1 - y0) * m.height)) })
+    .resize({ width: 1024, height: 1024, fit: 'inside' }).png().toBuffer();
+}
+
+function placeBodies(spec, o, x, z) {
+  ensureArticulation(spec); groundScene(spec);
+  const bb = worldAABB(spec); const maxDim = Math.max(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) || 0.3;
+  scaleBodies(spec.bodies, Math.min(4, Math.max(0.05, o.size_m)) / maxDim); groundScene(spec);
+  offsetBodies(spec.bodies, x, 0, z);
+  return spec.bodies;
+}
+
+// `rounds`: 0 = cheap primitive/humanoid · 1 = one-shot perceive · >=2 = FULL deep
+// render→judge→patch loop (the img2threejs method) run in its own dir, in parallel.
+async function buildOne(o, src, model, browser, runDir, rounds) {
   const centerX = Math.max(0, Math.min(1, (o.bbox[0] + o.bbox[2]) / 2)), centerY = Math.max(0, Math.min(1, (o.bbox[1] + o.bbox[3]) / 2));
   // x from horizontal position; z from MODEL-ESTIMATED DEPTH (not image row) so
-  // near/far objects stop collapsing into one plane. bottom-of-image nudges nearer
-  // as a fallback when depth is the default 0.5.
+  // near/far objects stop collapsing into one plane.
   const sceneW = 16, sceneD = 24;
   const depth = (o.depth == null ? 0.5 : o.depth);
   const z = (depth - 0.5) * sceneD - (centerY - 0.5) * 3; // far = +z (back), near = -z (front)
   const x = (centerX - 0.5) * sceneW;
   if (o.category === 'person') return humanoid(o, x, z);
-  if (SIMPLE.has(o.category)) { const b = primFor(o, x, z); if (o.moves !== 'none' && !b[0].motion) b[0].motion = { type: o.moves, axis: [0, 1, 0], rate: 1.2 }; return b; }
-  if (!allowPerceive) return primFor(o, x, z);
-  // complex machine / cabinet / robot / other-big → real perceive of its crop
+  if (rounds <= 0 || SIMPLE.has(o.category)) { const b = primFor(o, x, z); if (o.moves !== 'none' && !b[0].motion) b[0].motion = { type: o.moves, axis: [0, 1, 0], rate: 1.2 }; return b; }
   try {
-    const m = await sharp(src.path).metadata();
-    const buf = await sharp(src.path).extract({ left: Math.floor(o.bbox[0] * m.width), top: Math.floor(o.bbox[1] * m.height), width: Math.max(16, Math.floor((o.bbox[2] - o.bbox[0]) * m.width)), height: Math.max(16, Math.floor((o.bbox[3] - o.bbox[1]) * m.height)) }).resize({ width: 1024, height: 1024, fit: 'inside' }).png().toBuffer();
-    const { spec } = await perceiveRich({ images: [bufToDataUri(buf)], userHint: `a "${o.label}" (${o.category}) — isolated. Reconstruct it in detail.`, model });
-    ensureArticulation(spec); groundScene(spec);
-    const bb = worldAABB(spec); const maxDim = Math.max(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) || 0.3;
-    scaleBodies(spec.bodies, Math.min(4, Math.max(0.05, o.size_m)) / maxDim); groundScene(spec);
-    offsetBodies(spec.bodies, x, 0, z);
-    return spec.bodies;
+    const buf = await cropObject(o, src);
+    const hint = `a "${o.label}" (${o.category}), isolated on a plain background. Reconstruct it in FULL detail — every visible part as its own primitive, correct shapes and per-part colors. Do not collapse it into one block.`;
+    if (rounds === 1) {
+      // one-shot perceive (cheap tier for small/background objects)
+      const { spec } = await perceiveRich({ images: [bufToDataUri(buf)], userHint: hint, model });
+      return placeBodies(spec, o, x, z);
+    }
+    // DEEP: full render→judge→patch loop on this object's own crop, isolated dir
+    const objDir = path.join(runDir, 'obj', uid('o'));
+    fs.mkdirSync(objDir, { recursive: true });
+    const cropPath = path.join(objDir, 'ref.png');
+    fs.writeFileSync(cropPath, buf);
+    const { spec } = await buildObject({ images: [{ path: cropPath, dataUri: bufToDataUri(buf) }], userHint: hint, model, runDir: objDir, browser, maxRounds: rounds, threshold: 0.85, onProgress: () => {} });
+    return placeBodies(spec, o, x, z);
   } catch { return primFor(o, x, z); }
 }
 
 async function buildAll(objs, src, model, browser, runDir, onProgress, tag = 'built') {
-  // DRILL INTO every structured object (cap 80 real per-object reconstructions);
-  // simple shapes are instant primitives.
-  let perceives = 0;
-  const allow = objs.map(o => {
-    const complex = !SIMPLE.has(o.category) && o.category !== 'person';
-    if (complex && perceives < 80) { perceives++; return true; }
-    return false;
-  });
-  // bounded-parallel map — up to 16 per-object "agents" at once; progress as each finishes
+  // Each object is its own PARALLEL "agent". Budget the expensive deep loop toward the
+  // objects that carry the image (biggest first): heroes get the FULL render→judge→patch
+  // loop (img2threejs method), mid-size get a one-shot rich perceive, tiny bg get a primitive.
+  const DEEP_MAX = +process.env.DEEP_MAX || 24;      // how many objects get the full loop
+  const DEEP_ROUNDS = +process.env.DEEP_ROUNDS || 3; // rounds in that loop
+  const ONESHOT_MAX = +process.env.ONESHOT_MAX || 50; // next tier gets a single rich perceive
+  const CONC = +process.env.BUILD_CONC || 12;
+  const ranked = objs.map((o, i) => ({ i, o, area: (o.bbox[2] - o.bbox[0]) * (o.bbox[3] - o.bbox[1]) })).sort((a, b) => b.area - a.area);
+  const rounds = new Array(objs.length).fill(0);
+  let deep = 0, one = 0;
+  for (const e of ranked) {
+    if (e.o.category === 'person' || SIMPLE.has(e.o.category)) continue; // instant path in buildOne
+    if (deep < DEEP_MAX) { rounds[e.i] = DEEP_ROUNDS; deep++; }
+    else if (one < ONESHOT_MAX) { rounds[e.i] = 1; one++; }
+  }
+  onProgress({ phase: 'detect', msg: `${tag}: ${deep} objects → deep loop (${DEEP_ROUNDS}× render/judge/fix), ${one} → one-shot, rest primitive — all in parallel (${CONC} at once)` });
+  // bounded-parallel map — up to CONC per-object "agents" at once; progress as each finishes
   let done = 0; const total = objs.length;
-  const results = await mapPool(objs, 16, async (o, i) => {
-    const r = await buildOne(o, src, model, browser, runDir, allow[i]);
-    done++; onProgress({ phase: 'object', done, total, msg: `${tag}: ${o.label}` });
+  const results = await mapPool(objs, CONC, async (o, i) => {
+    const r = await buildOne(o, src, model, browser, runDir, rounds[i]);
+    done++; onProgress({ phase: 'object', done, total, msg: `${tag}: ${o.label}${rounds[i] >= 2 ? ' ✦' : ''}` });
     return r;
   });
   const out = [];
