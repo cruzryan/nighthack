@@ -8,6 +8,7 @@ import { ROOT, RUNS, log } from './config.js';
 import { reconstruct, refineScene, loadImageInputs } from './pipeline.js';
 import { reconstructScene } from './multiscene.js';
 import { launchBrowser, renderStates, standardStates } from './render.js';
+import { compileHTML } from './viewer.js';
 import { countBodies, fitCamera, repairDrawers } from './scene.js';
 import { toMJCF } from './mjcf.js';
 
@@ -150,9 +151,18 @@ app.post('/api/refine', async (req, res) => {
 
 app.get('/viewer/:id', (req, res) => {
   const s = sessions.get(req.params.id);
-  const p = s && path.join(s.runDir, 'final', 'index.html');
-  if (p && fs.existsSync(p)) return res.sendFile(p);
-  res.status(404).send('viewer not ready');
+  if (!s) return res.status(404).send('unknown session');
+  // Prefer the pre-rendered file, but if it's missing (e.g. Chromium never ran in
+  // prod) COMPILE the interactive viewer straight from the spec — it's self-contained
+  // HTML and needs no browser/screenshots at all.
+  const p = path.join(s.runDir, 'final', 'index.html');
+  if (fs.existsSync(p)) return res.sendFile(p);
+  try {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(compileHTML(s.spec));
+  } catch (e) {
+    log('viewer compile error', e); return res.status(500).send('viewer error');
+  }
 });
 
 // serve an original reference photo so the UI can show source-vs-render
