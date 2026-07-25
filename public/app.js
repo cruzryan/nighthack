@@ -177,7 +177,7 @@ $('#newScene').onclick = () => {
   ['#bOpen', '#bClose', '#bJson', '#bMjcf', '#bTab', '#bPhoto'].forEach(s => $(s).disabled = true);
   $('#refbox').style.display = 'none';
   $('#newScene').style.display = 'none';
-  updateGo();
+  updateGo(); loadRecent();
 };
 
 // reveal "New" once a scene exists
@@ -190,12 +190,18 @@ async function loadRecent() {
     const list = await (await fetch('/api/sessions')).json();
     const wrap = $('#recentWrap'), box = $('#recent');
     if (!list.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = state.sessionId ? 'none' : 'block';
+    wrap.style.display = 'block';
     box.innerHTML = '';
     for (const s of list) {
       const chip = document.createElement('button');
+      if (s.sessionId === state.sessionId) chip.className = 'sel';
       chip.innerHTML = `<span class="nm">${esc(s.name || 'scene')}</span><span class="mt">${s.joints} moving</span>`;
-      chip.onclick = () => { applyResult(s); addMsg('sys', `Loaded <b>${esc(s.name || 'scene')}</b> — chat to keep refining it.`); };
+      chip.onclick = () => {
+        if (state.busy || s.sessionId === state.sessionId) return;
+        // switching scenes: drop images staged for the previous one
+        state.images = []; state.pending = []; renderThumbs();
+        applyResult(s); addMsg('sys', `Loaded <b>${esc(s.name || 'scene')}</b> — chat to keep refining it.`);
+      };
       box.appendChild(chip);
     }
   } catch {}
