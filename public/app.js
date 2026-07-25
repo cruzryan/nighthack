@@ -140,6 +140,7 @@ function applyResult(r) {
   else $('#refbox').style.display = 'none';
   // switch left panel into "refine" mode
   $('#firstHint').style.display = 'none'; $('#opts').style.display = 'none';
+  document.querySelector('.lede').style.display = 'none';
   $('#promptLabel').textContent = 'Refine (chat) — or drop a new angle above';
   $('#prompt').placeholder = 'e.g. make the wood darker · the top drawer should open further · everything is 1 m from the camera';
   updateGo();
@@ -167,6 +168,7 @@ $('#newScene').onclick = () => {
   $('#prompt').value = ''; $('#frame').style.display = 'none'; $('#frame').src = 'about:blank';
   $('#empty').style.display = 'flex';
   $('#firstHint').style.display = ''; $('#opts').style.display = '';
+  document.querySelector('.lede').style.display = '';
   $('#promptLabel').textContent = 'Describe it (optional)';
   $('#prompt').placeholder = 'e.g. a wooden nightstand ~0.5 m wide with 2 drawers and a cabinet door. It sits 1 m from the camera.';
   $('#bar').classList.add('empty');
