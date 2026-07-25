@@ -174,6 +174,53 @@ async function buildAll(objs, src, model, browser, runDir, onProgress, tag = 'bu
   return out;
 }
 
+// ---- 2.5) deterministic sanitize: kill hallucinated floating rods, ground junk --
+function bodyDims(b) {
+  const g = b.geometry || {};
+  if (g.type === 'box' || g.type === 'tray' || g.type === 'frame' || g.type === 'plane') { const s = g.size || [0.2, 0.2, 0.2]; return { h: s[1], dims: s.slice() }; }
+  if (g.type === 'sphere') { const d = 2 * (g.radius || 0.1); return { h: d, dims: [d, d, d] }; }
+  if (g.type === 'torus') { const d = 2 * ((g.radius || 0.1) + (g.tube || 0.03)); return { h: 2 * (g.tube || 0.03), dims: [d, 2 * (g.tube || 0.03), d] }; }
+  if (g.type === 'extrude') { const xs = (g.shape || [[0, 0]]).map(p => p[0]), ys = (g.shape || [[0, 0]]).map(p => p[1]); const w = (Math.max(...xs) - Math.min(...xs)) || 0.1, ht = (Math.max(...ys) - Math.min(...ys)) || 0.1; return { h: ht, dims: [w, ht, g.depth || 0.05] }; }
+  const r = g.radius || 0.05, h = g.height || 0.2; return { h, dims: [2 * r, h, 2 * r] }; // cyl/cone/capsule/lathe
+}
+
+// Remove hallucinated stray "lines" (thin, elongated, floating rods) and drop
+// clearly-floating objects onto the floor. Deterministic, runs before verify.
+function sanitizeScene(spec) {
+  groundScene(spec);
+  const kept = [];
+  for (const b of spec.bodies || []) {
+    const { h, dims } = bodyDims(b);
+    const maxDim = Math.max(...dims), minDim = Math.min(...dims), bottom = b.position[1] - h / 2;
+    const thinRod = (maxDim / Math.max(0.002, minDim)) > 9 && minDim < 0.07;   // a "line"
+    if (thinRod && bottom > 0.4) continue;                                     // floating stray line -> delete
+    if (bottom > 0.8) b.position = [b.position[0], h / 2, b.position[2]];      // clearly floating -> drop to floor
+    kept.push(b);
+  }
+  const removed = (spec.bodies || []).length - kept.length;
+  spec.bodies = kept;
+  return removed;
+}
+
+// ---- 2.6) PARALLEL fly-around verifier: critics inspect from many angles at once
+// and flag hallucinated / junk objects to delete (the "verify what's wrong" system).
+async function criticChunk(chunk, src, renderUris, model) {
+  const sys = `You verify a 3D reconstruction against its reference photo. IMAGE 1 = the real photo. The other images = renders of the reconstruction from several angles (front/left/right/top). You are given a SUBSET of the reconstruction's objects (id | label | position | size). Flag the ones that are HALLUCINATED or JUNK — stray thin lines/rods, random floating boxes, things with no counterpart in the photo, obvious garbage. Be conservative: only remove clear junk; when unsure, KEEP it.
+Reply ONLY JSON: { "remove": ["id", ...] }`;
+  const user = `Objects (id | label | pos[x,y,z] | size_m):\n${chunk.map(o => `${o.id} | ${o.label} | [${o.pos}] | ${o.size}`).join('\n')}\n\nWhich of THESE are hallucinated/junk not supported by the photo? ONLY JSON {"remove":[ids]}.`;
+  try { const { json } = await visionJSON({ model, system: sys, user, images: [src.dataUri, ...renderUris], maxTokens: 900 }); return Array.isArray(json.remove) ? json.remove : []; } catch { return []; }
+}
+
+async function verifyAndRepair({ spec, src, renderUris, model, onProgress }) {
+  const objs = (spec.bodies || []).map(b => { const { dims } = bodyDims(b); return { id: b.id, label: b.label || b.geometry.type, pos: b.position.map(v => +v.toFixed(1)), size: +Math.max(...dims).toFixed(2) }; });
+  const chunks = []; for (let i = 0; i < objs.length; i += 18) chunks.push(objs.slice(i, i + 18));
+  onProgress({ phase: 'verify', msg: `Fly-around verify: ${chunks.length} critics inspecting ${objs.length} objects in parallel…` });
+  const lists = await Promise.all(chunks.map(ch => criticChunk(ch, src, renderUris, model)));   // parallel critics
+  const remove = new Set(); lists.flat().forEach(id => remove.add(id));
+  if (remove.size) spec.bodies = spec.bodies.filter(b => !remove.has(b.id));
+  return remove.size;
+}
+
 // ---- 3) completeness loop ------------------------------------------------------
 
 async function findMissing({ src, renderUris, presentLabels, model }) {
@@ -227,6 +274,23 @@ export async function reconstructScene({ images, prompt = '', runDir, model, bro
     const add = await buildAll(fresh, src, model, browser, runDir, onProgress, `added(r${round})`);
     bodies.push(...add); master = compose(bodies, name);
     onProgress({ phase: 'complete', round, msg: `Pass ${round}: added ${fresh.length} (${countBodies(master).bodies} parts total)` });
+  }
+
+  // CLEAN + PARALLEL FLY-AROUND VERIFY (remove hallucinated/floating junk)
+  onProgress({ phase: 'sanitize', msg: 'Cleaning stray/floating hallucinations…' });
+  const strayRemoved = sanitizeScene(master);
+  fitCamera(master);
+  { const az = master.camera.azimuth_deg, el = master.camera.elevation_deg, d = master.camera.distance;
+    const vshots = await renderStates(master, path.join(runDir, 'verify'), [
+      { name: 'a', camera: [az, el, d], close: true, plain: true },
+      { name: 'b', camera: [az + 70, el, d], close: true, plain: true },
+      { name: 'c', camera: [az - 70, el, d], close: true, plain: true },
+      { name: 't', camera: [az, 70, d], close: true, plain: true },
+    ], { browser, width: 640, height: 640, fit: false });
+    const vuris = await Promise.all(vshots.map(s => fileToScaledDataUri(s.path, 700)));
+    const halluc = await verifyAndRepair({ spec: master, src, renderUris: vuris, model, onProgress });
+    sanitizeScene(master);
+    onProgress({ phase: 'verified', msg: `Verify: removed ${strayRemoved} stray + ${halluc} hallucinated object(s)` });
   }
 
   fitCamera(master);
