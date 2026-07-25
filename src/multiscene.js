@@ -65,7 +65,7 @@ function normBbox(bb) {
 }
 function dedupe(objs) {
   const clean = objs.map(o => ({ ...o, bbox: normBbox(o.bbox) })).filter(o => o.bbox && (o.bbox[2] - o.bbox[0]) > 0.008 && (o.bbox[3] - o.bbox[1]) > 0.008)
-    .map(o => ({ label: (o.label || 'object').toString().slice(0, 40), category: (o.category || 'other').toLowerCase(), bbox: o.bbox, color: hex(o.color, '#9aa3ad'), size_m: Math.min(6, Math.max(0.03, num(o.size_m, 0.3))), moves: ['conveyor', 'spin', 'oscillate', 'slide'].includes(o.moves) ? o.moves : 'none' }));
+    .map(o => ({ label: (o.label || 'object').toString().slice(0, 40), category: (o.category || 'other').toLowerCase(), bbox: o.bbox, color: hex(o.color, '#9aa3ad'), size_m: Math.min(4, Math.max(0.03, num(o.size_m, 0.3))), moves: ['conveyor', 'spin', 'oscillate', 'slide'].includes(o.moves) ? o.moves : 'none' }));
   clean.sort((a, b) => ((b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1])) - ((a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1])));
   const kept = [];
   for (const o of clean) { if (!kept.some(k => iou(k.bbox, o.bbox) > 0.55)) kept.push(o); }
@@ -101,7 +101,7 @@ function humanoid(o, x, z) {
 const SIMPLE = new Set(['bottle', 'container', 'box', 'tank', 'pipe', 'beam', 'panel', 'tool', 'light', 'structure', 'conveyor']);
 
 function primFor(o, x, z) {
-  const s = Math.min(6, Math.max(0.04, o.size_m || 0.3)), c = o.color, id = uid(o.category);
+  const s = Math.min(4, Math.max(0.04, o.size_m || 0.3)), c = o.color, id = uid(o.category);
   const ar = (o.bbox[2] - o.bbox[0]) / Math.max(0.01, (o.bbox[3] - o.bbox[1])); // wide vs tall
   const base = (geom, extra = {}) => [{ id, label: o.label, geometry: geom, material: { color: c, kind: kindFor(o.category), ...(extra.mat || {}) }, position: [x, extra.y != null ? extra.y : s / 2, z], ...(extra.motion ? { motion: extra.motion } : {}), ...(extra.rot ? { rotation_deg: extra.rot } : {}), ...(extra.children ? { children: extra.children } : {}) }];
   switch (o.category) {
@@ -123,8 +123,10 @@ function kindFor(cat) { return ({ bottle: 'plastic', container: 'plastic', tank:
 
 async function buildOne(o, src, model, browser, runDir, allowPerceive) {
   const centerX = Math.max(0, Math.min(1, (o.bbox[0] + o.bbox[2]) / 2)), centerY = Math.max(0, Math.min(1, (o.bbox[1] + o.bbox[3]) / 2));
-  const sceneW = 6, sceneD = 5;
-  const x = (centerX - 0.5) * sceneW, z = (centerY - 0.5) * sceneD;
+  // spread across a large floor so objects don't collapse into a central pile;
+  // image row -> depth (bottom of image = foreground/nearer the camera).
+  const sceneW = 14, sceneD = 11;
+  const x = (centerX - 0.5) * sceneW, z = (centerY - 0.45) * sceneD;
   if (o.category === 'person') return humanoid(o, x, z);
   if (SIMPLE.has(o.category)) { const b = primFor(o, x, z); if (o.moves !== 'none' && !b[0].motion) b[0].motion = { type: o.moves, axis: [0, 1, 0], rate: 1.2 }; return b; }
   if (!allowPerceive) return primFor(o, x, z);
@@ -135,7 +137,7 @@ async function buildOne(o, src, model, browser, runDir, allowPerceive) {
     const { spec } = await perceiveRich({ images: [bufToDataUri(buf)], userHint: `a "${o.label}" (${o.category}) — isolated. Reconstruct it in detail.`, model });
     ensureArticulation(spec); groundScene(spec);
     const bb = worldAABB(spec); const maxDim = Math.max(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) || 0.3;
-    scaleBodies(spec.bodies, Math.min(6, Math.max(0.05, o.size_m)) / maxDim); groundScene(spec);
+    scaleBodies(spec.bodies, Math.min(4, Math.max(0.05, o.size_m)) / maxDim); groundScene(spec);
     offsetBodies(spec.bodies, x, 0, z);
     return spec.bodies;
   } catch { return primFor(o, x, z); }
