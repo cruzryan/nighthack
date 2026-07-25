@@ -345,6 +345,7 @@ const CLIENT_JS = String.raw`
     openAll() { for (const k in joints) joints[k].set(joints[k].range[1]); render(); },
     closeAll() { for (const k in joints) joints[k].set(joints[k].range[0]); render(); },
     setCamera(a, e, d) { if (a != null) az = a; if (e != null) el = e; if (d != null) dist = d; applyCam(); render(); },
+    focusAt(t, a, e, d) { if (Array.isArray(t)) target.set(t[0], t[1], t[2]); if (a != null) az = a; if (e != null) el = e; if (d != null) dist = d; applyCam(); render(); },
     setView(name) {
       const c = SPEC.camera, d = c.distance;
       const V = { ref: [c.azimuth_deg, c.elevation_deg], front: [0, 6], back: [180, 6], left: [-90, 6], right: [90, 6], side: [90, 6], top: [0, 82], bottom: [0, -70], iso: [35, 30], '34': [35, 25] };

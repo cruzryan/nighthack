@@ -54,6 +54,7 @@ export async function renderStates(spec, dir, states, opts = {}) {
         if (s.joints) for (const k in s.joints) api.setJoint(k, s.joints[k]);
         if (s.fracs) for (const k in s.fracs) api.setFrac(k, s.fracs[k]);
         if (s.time != null && api.setTime) api.setTime(s.time);
+        if (s.focus && api.focusAt) api.focusAt(s.focus, s.az, s.el, s.dist);   // zoom onto one object
         api.render();
       }, st);
       await page.waitForTimeout(120); // let shadows/tweens settle

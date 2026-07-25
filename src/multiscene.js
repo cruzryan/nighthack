@@ -170,8 +170,12 @@ async function buildAll(objs, src, model, browser, runDir, onProgress, tag = 'bu
     return r;
   });
   const out = [];
-  for (let i = 0; i < objs.length; i++) out.push(...(results[i] || []));
-  return out;
+  const index = [];  // per-object: source bbox + the ids/pos of the bodies it produced (for micro-verify)
+  for (let i = 0; i < objs.length; i++) {
+    const bs = results[i] || []; out.push(...bs);
+    if (bs.length && bs[0].position) index.push({ bbox: objs[i].bbox, label: objs[i].label, category: objs[i].category, size: Math.min(4, Math.max(0.12, objs[i].size_m || 0.5)), ids: bs.map(b => b.id), pos: bs[0].position.slice() });
+  }
+  return { bodies: out, index };
 }
 
 // ---- 2.5) deterministic sanitize: kill hallucinated floating rods, ground junk --
@@ -221,6 +225,54 @@ async function verifyAndRepair({ spec, src, renderUris, model, onProgress }) {
   return remove.size;
 }
 
+// PER-OBJECT micro-verify: zoom the camera into each object (2 angles), compare it
+// to its OWN crop of the source photo, in parallel; delete objects that don't match.
+async function microJudge(e, cropUri, ra, rb) {
+  if (!cropUri || !ra) return true; // can't judge -> keep
+  const sys = `You verify ONE reconstructed 3D object against the real thing. IMAGE 1 = a crop of the REAL photo showing a "${e.label}". IMAGE 2 (and 3) = the 3D reconstruction of that object, zoomed in from two angles. Does the reconstruction plausibly represent that real object (roughly right KIND/shape/color)? People, machines, tanks, cabinets, bottles, panels, conveyors are ALL legitimate — keep them. Only say keep:false if the reconstruction is clearly WRONG or JUNK for this crop (a random floating slab, a stray line/rod, or something with no relation at all to what's in the crop).
+Reply ONLY JSON: { "keep": true|false }`;
+  try {
+    const { json } = await visionJSON({ model: 'gpt-4o-mini', system: sys, user: `Does the reconstruction match this "${e.label}"? ONLY JSON {"keep":bool}.`, images: [cropUri, ra, rb].filter(Boolean), maxTokens: 60 });
+    return json.keep !== false;
+  } catch { return true; }
+}
+
+async function microVerify({ master, index, src, browser, runDir, onProgress }) {
+  const alive = new Set((master.bodies || []).map(b => b.id));
+  const items = index.filter(e => e.pos && e.ids.some(id => alive.has(id)));
+  if (!items.length) return 0;
+  onProgress({ phase: 'micro', total: items.length, done: 0, msg: `Micro-verify: zooming into ${items.length} objects (parallel)…` });
+  // 1) render two zoomed angles per object (one browser page; fast)
+  const states = [];
+  items.forEach((e, i) => {
+    const d = Math.max(0.4, e.size * 2.4);
+    states.push({ name: `m${i}a`, focus: e.pos, az: 25, el: 18, dist: d, plain: true });
+    states.push({ name: `m${i}b`, focus: e.pos, az: -55, el: 42, dist: d, plain: true });
+  });
+  const shots = await renderStates(master, path.join(runDir, 'micro'), states, { browser, width: 384, height: 384, fit: false });
+  const shotUri = {};
+  await Promise.all(shots.map(async s => { shotUri[s.name] = await fileToScaledDataUri(s.path, 384); }));
+  // 2) crop the source per object + judge in parallel (cheap model)
+  const meta = await sharp(src.path).metadata();
+  let done = 0;
+  const verdicts = await mapPool(items, 16, async (e, i) => {
+    let cropUri = null;
+    try {
+      const [x0, y0, x1, y1] = e.bbox;
+      const left = Math.floor(x0 * meta.width), top = Math.floor(y0 * meta.height);
+      const w = Math.max(16, Math.floor((x1 - x0) * meta.width)), h = Math.max(16, Math.floor((y1 - y0) * meta.height));
+      cropUri = bufToDataUri(await sharp(src.path).extract({ left, top, width: Math.min(w, meta.width - left), height: Math.min(h, meta.height - top) }).resize({ width: 384, height: 384, fit: 'inside' }).png().toBuffer());
+    } catch {}
+    const keep = await microJudge(e, cropUri, shotUri[`m${i}a`], shotUri[`m${i}b`]);
+    done++; onProgress({ phase: 'micro', total: items.length, done, msg: `Micro-verify ${done}/${items.length}` });
+    return { e, keep };
+  });
+  const del = new Set();
+  for (const v of verdicts) if (v && !v.keep) v.e.ids.forEach(id => del.add(id));
+  if (del.size) master.bodies = master.bodies.filter(b => !del.has(b.id));
+  return del.size;
+}
+
 // ---- 3) completeness loop ------------------------------------------------------
 
 async function findMissing({ src, renderUris, presentLabels, model }) {
@@ -251,7 +303,8 @@ export async function reconstructScene({ images, prompt = '', runDir, model, bro
 
   const census = await censusScene({ src, model, onProgress });
   onProgress({ phase: 'detected', msg: `Census found ${census.length} objects. Building each in parallel…`, objects: census.map(o => o.label), total: census.length });
-  let bodies = await buildAll(census, src, model, browser, runDir, onProgress);
+  const built0 = await buildAll(census, src, model, browser, runDir, onProgress);
+  let bodies = built0.bodies; const index = built0.index;
   let master = compose(bodies, name);
 
   // COMPLETENESS LOOP — keep adding what's missing until 2 dry rounds
@@ -272,26 +325,17 @@ export async function reconstructScene({ images, prompt = '', runDir, model, bro
     dry = 0;
     census.push(...fresh); present.push(...fresh.map(o => o.label));
     const add = await buildAll(fresh, src, model, browser, runDir, onProgress, `added(r${round})`);
-    bodies.push(...add); master = compose(bodies, name);
+    bodies.push(...add.bodies); index.push(...add.index); master = compose(bodies, name);
     onProgress({ phase: 'complete', round, msg: `Pass ${round}: added ${fresh.length} (${countBodies(master).bodies} parts total)` });
   }
 
-  // CLEAN + PARALLEL FLY-AROUND VERIFY (remove hallucinated/floating junk)
+  // CLEAN + PER-OBJECT MICRO-VERIFY: zoom into EACH object, compare it to its own
+  // source-photo crop from 2 angles, in parallel; delete what doesn't match.
   onProgress({ phase: 'sanitize', msg: 'Cleaning stray/floating hallucinations…' });
   const strayRemoved = sanitizeScene(master);
-  fitCamera(master);
-  { const az = master.camera.azimuth_deg, el = master.camera.elevation_deg, d = master.camera.distance;
-    const vshots = await renderStates(master, path.join(runDir, 'verify'), [
-      { name: 'a', camera: [az, el, d], close: true, plain: true },
-      { name: 'b', camera: [az + 70, el, d], close: true, plain: true },
-      { name: 'c', camera: [az - 70, el, d], close: true, plain: true },
-      { name: 't', camera: [az, 70, d], close: true, plain: true },
-    ], { browser, width: 640, height: 640, fit: false });
-    const vuris = await Promise.all(vshots.map(s => fileToScaledDataUri(s.path, 700)));
-    const halluc = await verifyAndRepair({ spec: master, src, renderUris: vuris, model, onProgress });
-    sanitizeScene(master);
-    onProgress({ phase: 'verified', msg: `Verify: removed ${strayRemoved} stray + ${halluc} hallucinated object(s)` });
-  }
+  const removedMicro = await microVerify({ master, index, src, browser, runDir, onProgress });
+  sanitizeScene(master);
+  onProgress({ phase: 'verified', msg: `Verify: removed ${strayRemoved} stray + ${removedMicro} mismatched object(s)` });
 
   fitCamera(master);
   await renderStates(master, path.join(runDir, 'final'), standardStates(), { browser });
