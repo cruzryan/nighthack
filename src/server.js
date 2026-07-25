@@ -23,9 +23,25 @@ async function getBrowser() {
 }
 
 // rehydrate past sessions from disk so viewers + refine survive a restart.
+// Seed the bundled example scenes (examples/sess_*) into runs/ on first run, so
+// the "Recent scenes" strip ships with demos even on a fresh clone.
+function seedExamples() {
+  const exDir = path.join(ROOT, 'examples');
+  if (!fs.existsSync(exDir)) return;
+  let n = 0;
+  for (const d of fs.readdirSync(exDir)) {
+    if (!d.startsWith('sess_')) continue;
+    const dst = path.join(RUNS, d);
+    if (fs.existsSync(dst)) continue;
+    try { fs.mkdirSync(RUNS, { recursive: true }); fs.cpSync(path.join(exDir, d), dst, { recursive: true }); n++; } catch {}
+  }
+  if (n) log(`seeded ${n} example scene(s) from examples/`);
+}
+
 // Also re-applies the latest deterministic repairs and re-renders the viewer,
 // so older scenes get the newest drawer/geometry fixes.
 async function rehydrate() {
+  seedExamples();
   let n = 0;
   let dirs = [];
   try { dirs = fs.readdirSync(RUNS).filter(d => d.startsWith('sess_')); } catch {}
