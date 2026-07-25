@@ -1,0 +1,189 @@
+// img2env frontend: image intake, streaming build/refine, live viewer.
+const $ = s => document.querySelector(s);
+const state = { sessionId: null, images: [], pending: [], busy: false };
+
+// ---------- image intake ----------
+const drop = $('#drop'), fileIn = $('#file'), thumbs = $('#thumbs');
+drop.onclick = () => fileIn.click();
+fileIn.onchange = e => { for (const f of e.target.files) addFile(f); fileIn.value = ''; };
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { for (const f of e.dataTransfer.files) if (f.type.startsWith('image/')) addFile(f); });
+window.addEventListener('paste', e => { for (const it of e.clipboardData.files) if (it.type.startsWith('image/')) addFile(it); });
+
+function addFile(f) {
+  const r = new FileReader();
+  r.onload = () => { const uri = r.result; const item = { uri, isNew: !!state.sessionId }; state.images.push(item); if (item.isNew) state.pending.push(uri); renderThumbs(); updateGo(); };
+  r.readAsDataURL(f);
+}
+function renderThumbs() {
+  thumbs.innerHTML = '';
+  state.images.forEach((im, i) => {
+    const d = document.createElement('div'); d.className = 'thumb' + (im.isNew ? ' new' : '');
+    d.innerHTML = `<img src="${im.uri}"/><div class="x">×</div>`;
+    d.querySelector('.x').onclick = () => { state.images.splice(i, 1); state.pending = state.pending.filter(p => p !== im.uri); renderThumbs(); updateGo(); };
+    thumbs.appendChild(d);
+  });
+}
+
+// ---------- controls ----------
+state.mode = 'object';
+document.querySelectorAll('.modeBtn').forEach(btn => btn.onclick = () => {
+  if (state.busy) return;
+  document.querySelectorAll('.modeBtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on'); state.mode = btn.dataset.mode;
+  $('#drop').querySelector('.sub') && ($('#drop').querySelector('.sub').textContent =
+    state.mode === 'scene' ? 'a photo of a table/desk with several objects' : 'front / angles / inside a drawer — more views = better');
+});
+$('#iters').oninput = e => $('#itersV').textContent = e.target.value;
+function updateGo() {
+  const go = $('#go');
+  if (state.busy) { go.disabled = true; return; }
+  if (!state.sessionId) { go.disabled = state.images.length === 0; go.textContent = 'Build environment'; }
+  else { const hasMsg = $('#prompt').value.trim() || state.pending.length; go.disabled = !hasMsg; go.textContent = state.pending.length ? `Enrich (+${state.pending.length} image)` : 'Send refinement'; }
+}
+$('#prompt').oninput = updateGo;
+
+// ---------- logging ----------
+const logEl = $('#log');
+function addMsg(cls, html) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; logEl.appendChild(d); d.scrollIntoView({ block: 'end' }); return d; }
+function veil(on, msg) { $('#veil').classList.toggle('on', on); if (msg) $('#veilMsg').textContent = msg; }
+
+// ---------- build / refine ----------
+$('#go').onclick = () => state.sessionId ? refine() : build();
+
+async function build() {
+  const prompt = $('#prompt').value.trim();
+  setBusy(true);
+  addMsg('you', prompt ? esc(prompt) : `<i>${state.images.length} image(s)</i>`);
+  const act = addMsg('sys act', '<span class="spin"></span>Starting…');
+  try {
+    await stream('/api/reconstruct', {
+      images: state.images.map(i => i.uri), prompt,
+      model: $('#quality').value, maxIters: +$('#iters').value, mode: state.mode,
+    }, act);
+  } catch (e) { act.className = 'msg err'; act.textContent = 'Failed: ' + e.message; }
+  setBusy(false);
+}
+
+async function refine() {
+  const msg = $('#prompt').value.trim();
+  setBusy(true);
+  addMsg('you', (msg ? esc(msg) : '') + (state.pending.length ? ` <i>(+${state.pending.length} image)</i>` : ''));
+  const act = addMsg('sys act', '<span class="spin"></span>Applying…');
+  try {
+    await stream('/api/refine', { sessionId: state.sessionId, message: msg, images: state.pending.slice() }, act);
+    $('#prompt').value = '';
+  } catch (e) { act.className = 'msg err'; act.textContent = 'Failed: ' + e.message; }
+  setBusy(false);
+}
+
+async function stream(url, body, actEl) {
+  veil(true, 'Working…');
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+  while (true) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const ln of lines) { if (ln.trim()) handleEvent(JSON.parse(ln), actEl); }
+  }
+  veil(false);
+}
+
+function handleEvent(ev, actEl) {
+  if (ev.phase === 'error') { actEl.className = 'msg err'; actEl.textContent = '⚠ ' + ev.msg; return; }
+  if (ev.msg) { actEl.innerHTML = '<span class="spin"></span>' + esc(ev.msg); veil(true, ev.msg); }
+  if (ev.phase === 'scored') {
+    const n = ev.round ?? ev.iter, f = ev.fidelity ?? ev.score;
+    addMsg('sys', `Round ${n}: <span class="sc">${Math.round((f || 0) * 100)}%</span> fidelity` + (ev.msg && ev.msg.includes('—') ? ' · ' + esc(ev.msg.split('—')[1].trim()) : ''));
+  }
+  if (ev.phase === 'detected') addMsg('sys', `Found <b>${(ev.objects || []).length}</b> objects: ${esc((ev.objects || []).join(', '))}`);
+  if (ev.phase === 'object') addMsg('sys', esc(ev.msg));
+  if (ev.phase === 'result') {
+    actEl.className = 'msg sys';
+    actEl.innerHTML = `Done — <span class="sc">${ev.score != null ? Math.round(ev.score * 100) + '%' : '✓'}</span> · ${ev.bodies} parts, ${ev.joints} movable`;
+    applyResult(ev);
+  }
+}
+
+function applyResult(r) {
+  state.sessionId = r.sessionId; state.pending = [];
+  state.images.forEach(i => i.isNew = false); renderThumbs();
+  $('#empty').style.display = 'none';
+  const f = $('#frame'); f.style.display = 'block'; f.src = r.viewerUrl + (r.viewerUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+  $('#sName').textContent = r.name || '—';
+  $('#sParts').textContent = r.bodies;
+  $('#sJoints').textContent = r.joints;
+  $('#sScore').textContent = r.score != null ? Math.round(r.score * 100) + '%' : '—';
+  $('#sCost').textContent = '$' + (r.cost || 0).toFixed(3);
+  ['#bOpen', '#bClose', '#bJson', '#bMjcf', '#bTab', '#bPhoto'].forEach(s => $(s).disabled = false);
+  // source photo overlay (compare render vs original)
+  const hasPhoto = (r.inputs || r.images || 0) > 0;
+  $('#bPhoto').disabled = !hasPhoto;
+  if (hasPhoto) { $('#refimg').src = `/api/input/${r.sessionId}/0?t=` + Date.now(); $('#refbox').style.display = 'block'; }
+  else $('#refbox').style.display = 'none';
+  // switch left panel into "refine" mode
+  $('#firstHint').style.display = 'none'; $('#opts').style.display = 'none';
+  $('#promptLabel').textContent = 'Refine (chat) — or drop a new angle above';
+  $('#prompt').placeholder = 'e.g. make the wood darker · the top drawer should open further · everything is 1 m from the camera';
+  updateGo();
+}
+
+function setBusy(b) { state.busy = b; updateGo(); document.querySelectorAll('select,#iters').forEach(e => e.disabled = b); }
+
+// ---------- viewer controls ----------
+const api = () => { try { return $('#frame').contentWindow.__api; } catch { return null; } };
+$('#bOpen').onclick = () => api()?.openAll();
+$('#bClose').onclick = () => api()?.closeAll();
+$('#bPhoto').onclick = () => { const b = $('#refbox'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; };
+$('#bTab').onclick = () => window.open($('#frame').src, '_blank');
+$('#bJson').onclick = () => dl(`/api/scene/${state.sessionId}`, (state.sessionId || 'scene') + '.json');
+$('#bMjcf').onclick = () => dl(`/api/mjcf/${state.sessionId}`, (state.sessionId || 'scene') + '.xml');
+function dl(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+// ---- new scene / reset ----
+$('#newScene').onclick = () => {
+  if (state.busy) return;
+  state.sessionId = null; state.images = []; state.pending = [];
+  renderThumbs(); logEl.innerHTML = '';
+  $('#prompt').value = ''; $('#frame').style.display = 'none'; $('#frame').src = 'about:blank';
+  $('#empty').style.display = 'flex';
+  $('#firstHint').style.display = ''; $('#opts').style.display = '';
+  $('#promptLabel').textContent = 'Describe it (optional)';
+  $('#prompt').placeholder = 'e.g. a wooden nightstand ~0.5 m wide with 2 drawers and a cabinet door. It sits 1 m from the camera.';
+  ['#sName'].forEach(s => $(s).textContent = '—');
+  $('#sParts').textContent = '0'; $('#sJoints').textContent = '0'; $('#sScore').textContent = '—'; $('#sCost').textContent = '$0';
+  ['#bOpen', '#bClose', '#bJson', '#bMjcf', '#bTab', '#bPhoto'].forEach(s => $(s).disabled = true);
+  $('#refbox').style.display = 'none';
+  $('#newScene').style.display = 'none';
+  updateGo();
+};
+
+// reveal "New" once a scene exists
+const _apply = applyResult;
+applyResult = function (r) { _apply(r); $('#newScene').style.display = 'inline-block'; loadRecent(); };
+
+// ---- recent scenes strip ----
+async function loadRecent() {
+  try {
+    const list = await (await fetch('/api/sessions')).json();
+    const wrap = $('#recentWrap'), box = $('#recent');
+    if (!list.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = state.sessionId ? 'none' : 'block';
+    box.innerHTML = '';
+    for (const s of list) {
+      const chip = document.createElement('button');
+      chip.style.cssText = 'background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit';
+      chip.innerHTML = `${esc(s.name || 'scene')} <span style="color:var(--faint)">· ${s.joints}◧</span>`;
+      chip.onmouseenter = () => chip.style.borderColor = 'var(--accent)';
+      chip.onmouseleave = () => chip.style.borderColor = 'var(--border2)';
+      chip.onclick = () => { applyResult(s); addMsg('sys', `Loaded <b>${esc(s.name || 'scene')}</b> — chat to keep refining it.`); };
+      box.appendChild(chip);
+    }
+  } catch {}
+}
+loadRecent();
+updateGo();
