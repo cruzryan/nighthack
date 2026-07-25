@@ -33,7 +33,7 @@ async function censusCell(imgPath, cell, model) {
   const [cx0, cy0, cx1, cy1] = cell;
   const left = Math.floor(cx0 * W), top = Math.floor(cy0 * H);
   const width = Math.max(16, Math.floor((cx1 - cx0) * W)), height = Math.max(16, Math.floor((cy1 - cy0) * H));
-  const buf = await sharp(imgPath).extract({ left, top, width: Math.min(width, W - left), height: Math.min(height, H - top) }).resize({ width: 640, height: 640, fit: 'inside' }).png().toBuffer();
+  const buf = await sharp(imgPath).extract({ left, top, width: Math.min(width, W - left), height: Math.min(height, H - top) }).resize({ width: 768, height: 768, fit: 'inside' }).png().toBuffer();
   try {
     const { json } = await visionJSON({ model, system: CENSUS_SYS, user: 'List EVERY object in this image region. Be exhaustive. ONLY JSON.', images: [bufToDataUri(buf)], maxTokens: 2500 });
     return (json.objects || []).map(o => ({ ...o, bbox: mapBbox(normBbox(o.bbox) || [0, 0, 1, 1], cell) }));
@@ -97,8 +97,18 @@ function humanoid(o, x, z) {
   ];
 }
 
-// deterministic primitive per category (0 API calls); complex machines get a real perceive
-const SIMPLE = new Set(['bottle', 'container', 'box', 'tank', 'pipe', 'beam', 'panel', 'tool', 'light', 'structure', 'conveyor']);
+// Only the genuinely-simple shapes stay as one deterministic primitive; everything
+// with internal structure (machine/cabinet/panel/tool/light/structure/other) gets
+// DRILLED INTO with a real per-object reconstruction (its own decomposed sub-model).
+const SIMPLE = new Set(['bottle', 'container', 'box', 'tank', 'pipe', 'beam', 'conveyor']);
+
+// bounded-concurrency parallel map (the "agents" — one per part, N at a time)
+async function mapPool(items, limit, fn) {
+  const out = new Array(items.length); let i = 0;
+  const worker = async () => { while (i < items.length) { const idx = i++; try { out[idx] = await fn(items[idx], idx); } catch { out[idx] = []; } } };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length || 1) }, worker));
+  return out;
+}
 
 function primFor(o, x, z) {
   const s = Math.min(4, Math.max(0.04, o.size_m || 0.3)), c = o.color, id = uid(o.category);
@@ -133,7 +143,7 @@ async function buildOne(o, src, model, browser, runDir, allowPerceive) {
   // complex machine / cabinet / robot / other-big → real perceive of its crop
   try {
     const m = await sharp(src.path).metadata();
-    const buf = await sharp(src.path).extract({ left: Math.floor(o.bbox[0] * m.width), top: Math.floor(o.bbox[1] * m.height), width: Math.max(16, Math.floor((o.bbox[2] - o.bbox[0]) * m.width)), height: Math.max(16, Math.floor((o.bbox[3] - o.bbox[1]) * m.height)) }).resize({ width: 512, height: 512, fit: 'inside' }).png().toBuffer();
+    const buf = await sharp(src.path).extract({ left: Math.floor(o.bbox[0] * m.width), top: Math.floor(o.bbox[1] * m.height), width: Math.max(16, Math.floor((o.bbox[2] - o.bbox[0]) * m.width)), height: Math.max(16, Math.floor((o.bbox[3] - o.bbox[1]) * m.height)) }).resize({ width: 1024, height: 1024, fit: 'inside' }).png().toBuffer();
     const { spec } = await perceiveRich({ images: [bufToDataUri(buf)], userHint: `a "${o.label}" (${o.category}) — isolated. Reconstruct it in detail.`, model });
     ensureArticulation(spec); groundScene(spec);
     const bb = worldAABB(spec); const maxDim = Math.max(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) || 0.3;
@@ -144,22 +154,23 @@ async function buildOne(o, src, model, browser, runDir, allowPerceive) {
 }
 
 async function buildAll(objs, src, model, browser, runDir, onProgress, tag = 'built') {
-  // cap expensive perceive calls (first 24 complex objects); simple ones are free
+  // DRILL INTO every structured object (cap 80 real per-object reconstructions);
+  // simple shapes are instant primitives.
   let perceives = 0;
   const allow = objs.map(o => {
     const complex = !SIMPLE.has(o.category) && o.category !== 'person';
-    if (complex && perceives < 24) { perceives++; return true; }
+    if (complex && perceives < 80) { perceives++; return true; }
     return false;
   });
-  // fully parallel map — one "agent" per object; emit progress as each finishes
+  // bounded-parallel map — up to 16 per-object "agents" at once; progress as each finishes
   let done = 0; const total = objs.length;
-  const results = await Promise.all(objs.map(async (o, i) => {
+  const results = await mapPool(objs, 16, async (o, i) => {
     const r = await buildOne(o, src, model, browser, runDir, allow[i]);
     done++; onProgress({ phase: 'object', done, total, msg: `${tag}: ${o.label}` });
     return r;
-  }));
+  });
   const out = [];
-  for (let i = 0; i < objs.length; i++) out.push(...results[i]);
+  for (let i = 0; i < objs.length; i++) out.push(...(results[i] || []));
   return out;
 }
 
