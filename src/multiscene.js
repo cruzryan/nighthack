@@ -229,10 +229,15 @@ async function verifyAndRepair({ spec, src, renderUris, model, onProgress }) {
 // to its OWN crop of the source photo, in parallel; delete objects that don't match.
 async function microJudge(e, cropUri, ra, rb) {
   if (!cropUri || !ra) return true; // can't judge -> keep
-  const sys = `You verify ONE reconstructed 3D object against the real thing. IMAGE 1 = a crop of the REAL photo showing a "${e.label}". IMAGE 2 (and 3) = the 3D reconstruction of that object, zoomed in from two angles. Does the reconstruction plausibly represent that real object (roughly right KIND/shape/color)? People, machines, tanks, cabinets, bottles, panels, conveyors are ALL legitimate — keep them. Only say keep:false if the reconstruction is clearly WRONG or JUNK for this crop (a random floating slab, a stray line/rod, or something with no relation at all to what's in the crop).
-Reply ONLY JSON: { "keep": true|false }`;
+  // CONSERVATIVE: a crude primitive NEVER matches a real machine's detail — that's
+  // expected. Only delete a reconstruction placed over EMPTY space (a hallucination)
+  // or obvious stray junk. Bias hard toward KEEP.
+  const sys = `You decide KEEP or DELETE for ONE object in a 3D reconstruction. IMAGE 1 = a crop of the REAL photo at this object's location (labelled "${e.label}"). IMAGE 2/3 = the crude blocky 3D reconstruction of it. The 3D is ONLY a rough primitive approximation — crude/blocky/wrong-detail is EXPECTED and FINE, never a reason to delete.
+KEEP if IMAGE 1 shows ANY real object, equipment, person, container, or structure at that spot (even partially, even if the 3D is a crude box).
+DELETE only if IMAGE 1 is essentially EMPTY floor / blank wall / plain background with no object there (so the 3D object is a hallucination over nothing), OR the reconstruction is obvious stray junk (a thin floating line/slab).
+When unsure, KEEP. Reply ONLY JSON: { "keep": true|false }`;
   try {
-    const { json } = await visionJSON({ model: 'gpt-4o-mini', system: sys, user: `Does the reconstruction match this "${e.label}"? ONLY JSON {"keep":bool}.`, images: [cropUri, ra, rb].filter(Boolean), maxTokens: 60 });
+    const { json } = await visionJSON({ model: 'gpt-4o-mini', system: sys, user: `Is there a real object at this location in the photo? Keep unless it's empty/junk. ONLY JSON {"keep":bool}.`, images: [cropUri, ra, rb].filter(Boolean), maxTokens: 60 });
     return json.keep !== false;
   } catch { return true; }
 }
