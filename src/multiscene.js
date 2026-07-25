@@ -144,16 +144,22 @@ async function buildOne(o, src, model, browser, runDir, allowPerceive) {
 }
 
 async function buildAll(objs, src, model, browser, runDir, onProgress, tag = 'built') {
-  // cap expensive perceive calls (first 14 complex objects); simple ones are free
+  // cap expensive perceive calls (first 24 complex objects); simple ones are free
   let perceives = 0;
   const allow = objs.map(o => {
     const complex = !SIMPLE.has(o.category) && o.category !== 'person';
-    if (complex && perceives < 14) { perceives++; return true; }
+    if (complex && perceives < 24) { perceives++; return true; }
     return false;
   });
-  const results = await Promise.all(objs.map((o, i) => buildOne(o, src, model, browser, runDir, allow[i])));
+  // fully parallel map — one "agent" per object; emit progress as each finishes
+  let done = 0; const total = objs.length;
+  const results = await Promise.all(objs.map(async (o, i) => {
+    const r = await buildOne(o, src, model, browser, runDir, allow[i]);
+    done++; onProgress({ phase: 'object', done, total, msg: `${tag}: ${o.label}` });
+    return r;
+  }));
   const out = [];
-  for (let i = 0; i < objs.length; i++) { out.push(...results[i]); onProgress({ phase: 'object', msg: `${tag}: ${objs[i].label}` }); }
+  for (let i = 0; i < objs.length; i++) out.push(...results[i]);
   return out;
 }
 
@@ -180,13 +186,13 @@ function compose(bodies, name) {
   });
 }
 
-export async function reconstructScene({ images, prompt = '', runDir, model, browser, maxComplete = 6, onProgress = () => {} }) {
+export async function reconstructScene({ images, prompt = '', runDir, model, browser, maxComplete = 3, onProgress = () => {} }) {
   fs.mkdirSync(runDir, { recursive: true });
   const src = images[0];
   const name = (prompt && prompt.slice(0, 40)) || 'scene';
 
   const census = await censusScene({ src, model, onProgress });
-  onProgress({ phase: 'detected', msg: `Census found ${census.length} objects. Building each…`, objects: census.map(o => o.label) });
+  onProgress({ phase: 'detected', msg: `Census found ${census.length} objects. Building each in parallel…`, objects: census.map(o => o.label), total: census.length });
   let bodies = await buildAll(census, src, model, browser, runDir, onProgress);
   let master = compose(bodies, name);
 
