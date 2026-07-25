@@ -25,6 +25,8 @@ Reply ONLY JSON: { "objects": [ {
   "bbox": [x0,y0,x1,y1],   // fractions 0..1 within THIS image
   "color": "#rrggbb",       // dominant color
   "size_m": n,              // largest real dimension in meters (person~1.7, tank~2, bottle~0.3, box~0.4, pipe by length)
+  "depth": n,               // 0=closest to camera (foreground), 1=farthest away. Use perspective, occlusion, size cues. CRITICAL for correct layout.
+  "long_axis": "vertical|horizontal|none",  // is this object's longest dimension standing up (tank/person) or lying down (fuselage/pipe/beam on its side)?
   "moves": "none|conveyor|spin|oscillate|slide"
 } ] }`;
 
@@ -65,7 +67,7 @@ function normBbox(bb) {
 }
 function dedupe(objs) {
   const clean = objs.map(o => ({ ...o, bbox: normBbox(o.bbox) })).filter(o => o.bbox && (o.bbox[2] - o.bbox[0]) > 0.008 && (o.bbox[3] - o.bbox[1]) > 0.008)
-    .map(o => ({ label: (o.label || 'object').toString().slice(0, 40), category: (o.category || 'other').toLowerCase(), bbox: o.bbox, color: hex(o.color, '#9aa3ad'), size_m: Math.min(4, Math.max(0.03, num(o.size_m, 0.3))), moves: ['conveyor', 'spin', 'oscillate', 'slide'].includes(o.moves) ? o.moves : 'none' }));
+    .map(o => ({ label: (o.label || 'object').toString().slice(0, 40), category: (o.category || 'other').toLowerCase(), bbox: o.bbox, color: hex(o.color, '#9aa3ad'), size_m: Math.min(4, Math.max(0.03, num(o.size_m, 0.3))), depth: Math.max(0, Math.min(1, num(o.depth, 0.5))), long_axis: ['vertical', 'horizontal', 'none'].includes(o.long_axis) ? o.long_axis : 'none', moves: ['conveyor', 'spin', 'oscillate', 'slide'].includes(o.moves) ? o.moves : 'none' }));
   clean.sort((a, b) => ((b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1])) - ((a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1])));
   const kept = [];
   for (const o of clean) { if (!kept.some(k => iou(k.bbox, o.bbox) > 0.55)) kept.push(o); }
@@ -113,10 +115,16 @@ async function mapPool(items, limit, fn) {
 function primFor(o, x, z) {
   const s = Math.min(4, Math.max(0.04, o.size_m || 0.3)), c = o.color, id = uid(o.category);
   const ar = (o.bbox[2] - o.bbox[0]) / Math.max(0.01, (o.bbox[3] - o.bbox[1])); // wide vs tall
+  // is the object lying on its side (fuselage, pipe, drum on rack) vs standing (storage tank)?
+  const lying = o.long_axis === 'horizontal' || (o.long_axis !== 'vertical' && ar > 1.8);
   const base = (geom, extra = {}) => [{ id, label: o.label, geometry: geom, material: { color: c, kind: kindFor(o.category), ...(extra.mat || {}) }, position: [x, extra.y != null ? extra.y : s / 2, z], ...(extra.motion ? { motion: extra.motion } : {}), ...(extra.rot ? { rotation_deg: extra.rot } : {}), ...(extra.children ? { children: extra.children } : {}) }];
   switch (o.category) {
     case 'bottle': case 'container': return base({ type: 'lathe', radius: s * 0.28, height: s, profile: [[0.9, 0], [0.95, 0.55], [0.35, 0.72], [0.32, 0.9], [0.5, 1]] });
-    case 'tank': return base({ type: 'cylinder', radius: s * 0.32, height: s }, { children: [{ id: id + '_top', geometry: { type: 'cone', radius: s * 0.32, height: s * 0.3 }, material: { color: c, kind: 'metal' }, position: [0, s * 0.55, 0] }] });
+    case 'tank':
+      // a WIDE/long tank is almost always a fuselage/drum lying on its side — lay it down,
+      // don't stand it up as a silo. Only a genuinely tall tank keeps the vertical silo+cone.
+      if (lying) return base({ type: 'cylinder', radius: s * 0.16, height: s }, { rot: [0, 0, 90], y: s * 0.16 });
+      return base({ type: 'cylinder', radius: s * 0.32, height: s }, { children: [{ id: id + '_top', geometry: { type: 'cone', radius: s * 0.32, height: s * 0.3 }, material: { color: c, kind: 'metal' }, position: [0, s * 0.55, 0] }] });
     case 'pipe': return base({ type: 'cylinder', radius: Math.max(0.02, s * 0.06), height: s }, { rot: ar > 1.4 ? [0, 0, 90] : [0, 0, 0], y: ar > 1.4 ? Math.max(0.3, s * 0.4) : s / 2 });
     case 'beam': return base({ type: 'box', size: ar > 1 ? [s, s * 0.06, s * 0.06] : [s * 0.06, s, s * 0.06] }, { y: ar > 1 ? Math.max(0.5, s * 0.5) : s / 2 });
     case 'box': return base({ type: 'box', size: [s * 0.9, s * 0.7, s * 0.9] }, { y: s * 0.35 });
@@ -133,10 +141,13 @@ function kindFor(cat) { return ({ bottle: 'plastic', container: 'plastic', tank:
 
 async function buildOne(o, src, model, browser, runDir, allowPerceive) {
   const centerX = Math.max(0, Math.min(1, (o.bbox[0] + o.bbox[2]) / 2)), centerY = Math.max(0, Math.min(1, (o.bbox[1] + o.bbox[3]) / 2));
-  // spread across a large floor so objects don't collapse into a central pile;
-  // image row -> depth (bottom of image = foreground/nearer the camera).
-  const sceneW = 14, sceneD = 11;
-  const x = (centerX - 0.5) * sceneW, z = (centerY - 0.45) * sceneD;
+  // x from horizontal position; z from MODEL-ESTIMATED DEPTH (not image row) so
+  // near/far objects stop collapsing into one plane. bottom-of-image nudges nearer
+  // as a fallback when depth is the default 0.5.
+  const sceneW = 16, sceneD = 24;
+  const depth = (o.depth == null ? 0.5 : o.depth);
+  const z = (depth - 0.5) * sceneD - (centerY - 0.5) * 3; // far = +z (back), near = -z (front)
+  const x = (centerX - 0.5) * sceneW;
   if (o.category === 'person') return humanoid(o, x, z);
   if (SIMPLE.has(o.category)) { const b = primFor(o, x, z); if (o.moves !== 'none' && !b[0].motion) b[0].motion = { type: o.moves, axis: [0, 1, 0], rate: 1.2 }; return b; }
   if (!allowPerceive) return primFor(o, x, z);
@@ -284,7 +295,8 @@ async function findMissing({ src, renderUris, presentLabels, model }) {
   const sys = `IMAGE 1 = the REAL reference photo. The other images = the CURRENT 3D reconstruction render.
 The reconstruction currently contains these objects: ${presentLabels.slice(0, 120).join(', ') || '(none)'}.
 List every object VISIBLE IN THE REFERENCE that is MISSING from the render (or grossly under-represented). Be thorough and specific — include people, pipes, hoses, small machines, background structures, tanks, panels, tools. Ignore exact framing/lighting.
-Reply ONLY JSON: { "missing": [ { "label": string, "category": "person|machine|tank|bottle|container|box|pipe|conveyor|beam|panel|cabinet|tool|light|structure|other", "bbox":[x0,y0,x1,y1], "color":"#rrggbb", "size_m": n, "moves":"none|conveyor|spin|oscillate|slide" } ] }
+Reply ONLY JSON: { "missing": [ { "label": string, "category": "person|machine|tank|bottle|container|box|pipe|conveyor|beam|panel|cabinet|tool|light|structure|other", "bbox":[x0,y0,x1,y1], "color":"#rrggbb", "size_m": n, "depth": n, "long_axis":"vertical|horizontal|none", "moves":"none|conveyor|spin|oscillate|slide" } ] }
+"depth": 0=closest to camera, 1=farthest. "long_axis": is its longest side standing up or lying down.
 If truly nothing significant is missing, return {"missing":[]}.`;
   try {
     const { json } = await visionJSON({ model, system: sys, user: 'What is in the reference but missing from the render? ONLY JSON.', images: [src.dataUri, ...renderUris], maxTokens: 2500 });
