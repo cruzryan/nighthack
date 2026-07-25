@@ -1,0 +1,219 @@
+// EXHAUSTIVE scene reconstruction: don't miss 90% of the objects.
+//   1) GRID CENSUS — scan every region of the photo so nothing is skipped
+//   2) BUILD EACH — real geometry per object (people become humanoids)
+//   3) COMPLETENESS LOOP — keep asking "what's in the photo but NOT in my render?"
+//      and add it, until two rounds find nothing new ("verify 10x more").
+import fs from 'node:fs';
+import path from 'node:path';
+import sharp from 'sharp';
+import { visionJSON } from './openai.js';
+import { perceiveRich } from './agents.js';
+import { normalizeScene, worldAABB, groundScene, scaleBodies, offsetBodies, ensureArticulation, fitCamera, countBodies } from './scene.js';
+import { renderStates, standardStates } from './render.js';
+import { bufToDataUri, fileToScaledDataUri } from './imageutil.js';
+
+const hex = (v, d) => (typeof v === 'string' && /^#?[0-9a-fA-F]{6}$/.test((v || '').trim())) ? (v.trim()[0] === '#' ? v.trim() : '#' + v.trim()) : d;
+const num = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
+let _uid = 0; const uid = p => `${p}_${(_uid++).toString(36)}`;
+
+// ---- 1) exhaustive grid census -------------------------------------------------
+
+const CENSUS_SYS = `You are an exhaustive object detector for 3D reconstruction. List EVERY distinct physical object visible — do NOT summarize or skip anything. Include people, machines, tanks, bottles/containers, pipes/hoses, conveyors, boxes/crates, control panels, cabinets, beams/rails, wall panels, tools, lights. Small and background objects count.
+Reply ONLY JSON: { "objects": [ {
+  "label": string,
+  "category": "person|machine|tank|bottle|container|box|pipe|conveyor|beam|panel|cabinet|tool|light|structure|other",
+  "bbox": [x0,y0,x1,y1],   // fractions 0..1 within THIS image
+  "color": "#rrggbb",       // dominant color
+  "size_m": n,              // largest real dimension in meters (person~1.7, tank~2, bottle~0.3, box~0.4, pipe by length)
+  "moves": "none|conveyor|spin|oscillate|slide"
+} ] }`;
+
+async function censusCell(imgPath, cell, model) {
+  const m = await sharp(imgPath).metadata(); const W = m.width, H = m.height;
+  const [cx0, cy0, cx1, cy1] = cell;
+  const left = Math.floor(cx0 * W), top = Math.floor(cy0 * H);
+  const width = Math.max(16, Math.floor((cx1 - cx0) * W)), height = Math.max(16, Math.floor((cy1 - cy0) * H));
+  const buf = await sharp(imgPath).extract({ left, top, width: Math.min(width, W - left), height: Math.min(height, H - top) }).resize({ width: 640, height: 640, fit: 'inside' }).png().toBuffer();
+  try {
+    const { json } = await visionJSON({ model, system: CENSUS_SYS, user: 'List EVERY object in this image region. Be exhaustive. ONLY JSON.', images: [bufToDataUri(buf)], maxTokens: 2500 });
+    return (json.objects || []).map(o => ({ ...o, bbox: mapBbox(normBbox(o.bbox) || [0, 0, 1, 1], cell) }));
+  } catch { return []; }
+}
+
+function mapBbox(bb, cell) {
+  if (!Array.isArray(bb) || bb.length !== 4) return [cell[0], cell[1], cell[2], cell[3]];
+  const [cx0, cy0, cx1, cy1] = cell, w = cx1 - cx0, h = cy1 - cy0;
+  return [cx0 + bb[0] * w, cy0 + bb[1] * h, cx0 + bb[2] * w, cy0 + bb[3] * h];
+}
+
+function iou(a, b) {
+  const x0 = Math.max(a[0], b[0]), y0 = Math.max(a[1], b[1]), x1 = Math.min(a[2], b[2]), y1 = Math.min(a[3], b[3]);
+  const iw = Math.max(0, x1 - x0), ih = Math.max(0, y1 - y0), inter = iw * ih;
+  const ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter;
+  return ua > 0 ? inter / ua : 0;
+}
+
+function normBbox(bb) {
+  if (!Array.isArray(bb) || bb.length !== 4 || bb.some(v => !isFinite(v))) return null;
+  let b = bb.slice();
+  // some models return PIXELS not 0..1 fractions — normalize if clearly out of range
+  const mx = Math.max(...b.map(Math.abs));
+  if (mx > 1.5) b = b.map(v => v / mx);
+  b = b.map(v => Math.max(0, Math.min(1, v)));
+  const x0 = Math.min(b[0], b[2]), x1 = Math.max(b[0], b[2]), y0 = Math.min(b[1], b[3]), y1 = Math.max(b[1], b[3]);
+  return [x0, y0, x1, y1];
+}
+function dedupe(objs) {
+  const clean = objs.map(o => ({ ...o, bbox: normBbox(o.bbox) })).filter(o => o.bbox && (o.bbox[2] - o.bbox[0]) > 0.008 && (o.bbox[3] - o.bbox[1]) > 0.008)
+    .map(o => ({ label: (o.label || 'object').toString().slice(0, 40), category: (o.category || 'other').toLowerCase(), bbox: o.bbox, color: hex(o.color, '#9aa3ad'), size_m: Math.min(6, Math.max(0.03, num(o.size_m, 0.3))), moves: ['conveyor', 'spin', 'oscillate', 'slide'].includes(o.moves) ? o.moves : 'none' }));
+  clean.sort((a, b) => ((b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1])) - ((a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1])));
+  const kept = [];
+  for (const o of clean) { if (!kept.some(k => iou(k.bbox, o.bbox) > 0.55)) kept.push(o); }
+  return kept.slice(0, 120);
+}
+
+export async function censusScene({ src, model, onProgress = () => {} }) {
+  // global pass (big objects) + a 3x3 grid (nothing skipped)
+  const cells = [[0, 0, 1, 1]];
+  for (let gy = 0; gy < 3; gy++) for (let gx = 0; gx < 3; gx++) cells.push([gx / 3 - 0.02, gy / 3 - 0.02, (gx + 1) / 3 + 0.02, (gy + 1) / 3 + 0.02].map((v, i) => Math.max(0, Math.min(1, v))));
+  onProgress({ phase: 'detect', msg: `Exhaustive census: scanning ${cells.length} regions…` });
+  const all = (await Promise.all(cells.map(c => censusCell(src.path, c, model)))).flat();
+  return dedupe(all);
+}
+
+// ---- 2) build each object ------------------------------------------------------
+
+function humanoid(o, x, z) {
+  const h = Math.min(2.0, Math.max(1.2, o.size_m || 1.7)), coat = o.color, skin = '#cfa47a', dark = '#333a44';
+  const legH = h * 0.46, torsoH = h * 0.34, torsoW = h * 0.30, headR = h * 0.065, armH = h * 0.34;
+  const cy = legH + torsoH / 2, id = uid('person');
+  return [
+    { id, label: o.label || 'person', geometry: { type: 'capsule', radius: torsoW / 2, height: torsoH + torsoW }, material: { color: coat, kind: 'fabric' }, position: [x, cy, z],
+      children: [{ id: id + '_head', geometry: { type: 'sphere', radius: headR }, material: { color: skin, kind: 'plastic' }, position: [0, torsoH / 2 + headR * 0.8, 0] }] },
+    { id: id + '_armL', geometry: { type: 'capsule', radius: h * 0.028, height: armH }, material: { color: coat, kind: 'fabric' }, position: [x - torsoW / 2, cy, z], rotation_deg: [0, 0, 8] },
+    { id: id + '_armR', geometry: { type: 'capsule', radius: h * 0.028, height: armH }, material: { color: coat, kind: 'fabric' }, position: [x + torsoW / 2, cy, z], rotation_deg: [0, 0, -8] },
+    { id: id + '_legL', geometry: { type: 'capsule', radius: h * 0.04, height: legH }, material: { color: dark, kind: 'fabric' }, position: [x - torsoW * 0.22, legH / 2, z] },
+    { id: id + '_legR', geometry: { type: 'capsule', radius: h * 0.04, height: legH }, material: { color: dark, kind: 'fabric' }, position: [x + torsoW * 0.22, legH / 2, z] },
+  ];
+}
+
+// deterministic primitive per category (0 API calls); complex machines get a real perceive
+const SIMPLE = new Set(['bottle', 'container', 'box', 'tank', 'pipe', 'beam', 'panel', 'tool', 'light', 'structure', 'conveyor']);
+
+function primFor(o, x, z) {
+  const s = Math.min(6, Math.max(0.04, o.size_m || 0.3)), c = o.color, id = uid(o.category);
+  const ar = (o.bbox[2] - o.bbox[0]) / Math.max(0.01, (o.bbox[3] - o.bbox[1])); // wide vs tall
+  const base = (geom, extra = {}) => [{ id, label: o.label, geometry: geom, material: { color: c, kind: kindFor(o.category), ...(extra.mat || {}) }, position: [x, extra.y != null ? extra.y : s / 2, z], ...(extra.motion ? { motion: extra.motion } : {}), ...(extra.rot ? { rotation_deg: extra.rot } : {}), ...(extra.children ? { children: extra.children } : {}) }];
+  switch (o.category) {
+    case 'bottle': case 'container': return base({ type: 'lathe', radius: s * 0.28, height: s, profile: [[0.9, 0], [0.95, 0.55], [0.35, 0.72], [0.32, 0.9], [0.5, 1]] });
+    case 'tank': return base({ type: 'cylinder', radius: s * 0.32, height: s }, { children: [{ id: id + '_top', geometry: { type: 'cone', radius: s * 0.32, height: s * 0.3 }, material: { color: c, kind: 'metal' }, position: [0, s * 0.55, 0] }] });
+    case 'pipe': return base({ type: 'cylinder', radius: Math.max(0.02, s * 0.06), height: s }, { rot: ar > 1.4 ? [0, 0, 90] : [0, 0, 0], y: ar > 1.4 ? Math.max(0.3, s * 0.4) : s / 2 });
+    case 'beam': return base({ type: 'box', size: ar > 1 ? [s, s * 0.06, s * 0.06] : [s * 0.06, s, s * 0.06] }, { y: ar > 1 ? Math.max(0.5, s * 0.5) : s / 2 });
+    case 'box': return base({ type: 'box', size: [s * 0.9, s * 0.7, s * 0.9] }, { y: s * 0.35 });
+    case 'panel': case 'structure': return base({ type: 'box', size: [ar >= 1 ? s : s * 0.5, ar >= 1 ? s * 0.6 : s, 0.08] }, { y: (ar >= 1 ? s * 0.6 : s) / 2 });
+    case 'light': return base({ type: 'box', size: [s, 0.06, 0.3] }, { y: 2.6, mat: { emissive: '#ffffff' } });
+    case 'conveyor': {
+      const cargo = [-0.3, 0, 0.3].map((zz, k) => ({ id: id + '_c' + k, geometry: { type: 'box', size: [s * 0.12, s * 0.12, s * 0.12] }, material: { color: '#b5651d', kind: 'plastic' }, position: [0, s * 0.1, zz * s] }));
+      return base({ type: 'box', size: [s * 0.35, s * 0.08, s * 1.4] }, { y: 0.5, motion: { type: 'conveyor', axis: [0, 0, 1], rate: 0.4 }, children: cargo });
+    }
+    default: return base({ type: 'box', size: [s * 0.8, s, s * 0.8] }, { y: s / 2 });
+  }
+}
+function kindFor(cat) { return ({ bottle: 'plastic', container: 'plastic', tank: 'metal', pipe: 'metal', beam: 'metal', panel: 'metal', box: 'painted', conveyor: 'metal', light: 'plastic', machine: 'metal', cabinet: 'metal' })[cat] || 'metal'; }
+
+async function buildOne(o, src, model, browser, runDir, allowPerceive) {
+  const centerX = Math.max(0, Math.min(1, (o.bbox[0] + o.bbox[2]) / 2)), centerY = Math.max(0, Math.min(1, (o.bbox[1] + o.bbox[3]) / 2));
+  const sceneW = 6, sceneD = 5;
+  const x = (centerX - 0.5) * sceneW, z = (centerY - 0.5) * sceneD;
+  if (o.category === 'person') return humanoid(o, x, z);
+  if (SIMPLE.has(o.category)) { const b = primFor(o, x, z); if (o.moves !== 'none' && !b[0].motion) b[0].motion = { type: o.moves, axis: [0, 1, 0], rate: 1.2 }; return b; }
+  if (!allowPerceive) return primFor(o, x, z);
+  // complex machine / cabinet / robot / other-big → real perceive of its crop
+  try {
+    const m = await sharp(src.path).metadata();
+    const buf = await sharp(src.path).extract({ left: Math.floor(o.bbox[0] * m.width), top: Math.floor(o.bbox[1] * m.height), width: Math.max(16, Math.floor((o.bbox[2] - o.bbox[0]) * m.width)), height: Math.max(16, Math.floor((o.bbox[3] - o.bbox[1]) * m.height)) }).resize({ width: 512, height: 512, fit: 'inside' }).png().toBuffer();
+    const { spec } = await perceiveRich({ images: [bufToDataUri(buf)], userHint: `a "${o.label}" (${o.category}) — isolated. Reconstruct it in detail.`, model });
+    ensureArticulation(spec); groundScene(spec);
+    const bb = worldAABB(spec); const maxDim = Math.max(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) || 0.3;
+    scaleBodies(spec.bodies, Math.min(6, Math.max(0.05, o.size_m)) / maxDim); groundScene(spec);
+    offsetBodies(spec.bodies, x, 0, z);
+    return spec.bodies;
+  } catch { return primFor(o, x, z); }
+}
+
+async function buildAll(objs, src, model, browser, runDir, onProgress, tag = 'built') {
+  // cap expensive perceive calls (first 14 complex objects); simple ones are free
+  let perceives = 0;
+  const allow = objs.map(o => {
+    const complex = !SIMPLE.has(o.category) && o.category !== 'person';
+    if (complex && perceives < 14) { perceives++; return true; }
+    return false;
+  });
+  const results = await Promise.all(objs.map((o, i) => buildOne(o, src, model, browser, runDir, allow[i])));
+  const out = [];
+  for (let i = 0; i < objs.length; i++) { out.push(...results[i]); onProgress({ phase: 'object', msg: `${tag}: ${objs[i].label}` }); }
+  return out;
+}
+
+// ---- 3) completeness loop ------------------------------------------------------
+
+async function findMissing({ src, renderUris, presentLabels, model }) {
+  const sys = `IMAGE 1 = the REAL reference photo. The other images = the CURRENT 3D reconstruction render.
+The reconstruction currently contains these objects: ${presentLabels.slice(0, 120).join(', ') || '(none)'}.
+List every object VISIBLE IN THE REFERENCE that is MISSING from the render (or grossly under-represented). Be thorough and specific — include people, pipes, hoses, small machines, background structures, tanks, panels, tools. Ignore exact framing/lighting.
+Reply ONLY JSON: { "missing": [ { "label": string, "category": "person|machine|tank|bottle|container|box|pipe|conveyor|beam|panel|cabinet|tool|light|structure|other", "bbox":[x0,y0,x1,y1], "color":"#rrggbb", "size_m": n, "moves":"none|conveyor|spin|oscillate|slide" } ] }
+If truly nothing significant is missing, return {"missing":[]}.`;
+  try {
+    const { json } = await visionJSON({ model, system: sys, user: 'What is in the reference but missing from the render? ONLY JSON.', images: [src.dataUri, ...renderUris], maxTokens: 2500 });
+    return dedupe(json.missing || []);
+  } catch { return []; }
+}
+
+function compose(bodies, name) {
+  return normalizeScene({
+    meta: { name },
+    camera: { azimuth_deg: 32, elevation_deg: 20, fov_deg: 48 },
+    environment: { background: '#e9edf2', ground: { color: '#b9bfc6', visible: true } },
+    bodies,
+  });
+}
+
+export async function reconstructScene({ images, prompt = '', runDir, model, browser, maxComplete = 6, onProgress = () => {} }) {
+  fs.mkdirSync(runDir, { recursive: true });
+  const src = images[0];
+  const name = (prompt && prompt.slice(0, 40)) || 'scene';
+
+  const census = await censusScene({ src, model, onProgress });
+  onProgress({ phase: 'detected', msg: `Census found ${census.length} objects. Building each…`, objects: census.map(o => o.label) });
+  let bodies = await buildAll(census, src, model, browser, runDir, onProgress);
+  let master = compose(bodies, name);
+
+  // COMPLETENESS LOOP — keep adding what's missing until 2 dry rounds
+  let dry = 0, present = census.map(o => o.label);
+  for (let round = 1; round <= maxComplete; round++) {
+    fitCamera(master);
+    const az = master.camera.azimuth_deg, el = master.camera.elevation_deg, d = master.camera.distance;
+    const shots = await renderStates(master, path.join(runDir, `c${round}`), [
+      { name: 'a', camera: [az, el, d], close: true, plain: true },
+      { name: 'b', camera: [az + 55, el, d], close: true, plain: true },
+    ], { browser, width: 640, height: 640, fit: false });
+    const renderUris = await Promise.all(shots.map(s => fileToScaledDataUri(s.path, 700)));
+    onProgress({ phase: 'complete', round, msg: `Completeness pass ${round}: what's still missing?` });
+    const missing = await findMissing({ src, renderUris, presentLabels: present, model });
+    // drop ones we already effectively have (bbox overlap with an existing census bbox)
+    const fresh = missing.filter(mo => !census.some(c => iou(c.bbox, mo.bbox) > 0.5));
+    if (!fresh.length) { dry++; onProgress({ phase: 'complete', round, msg: `Pass ${round}: nothing new (${dry}/2)` }); if (dry >= 2) break; continue; }
+    dry = 0;
+    census.push(...fresh); present.push(...fresh.map(o => o.label));
+    const add = await buildAll(fresh, src, model, browser, runDir, onProgress, `added(r${round})`);
+    bodies.push(...add); master = compose(bodies, name);
+    onProgress({ phase: 'complete', round, msg: `Pass ${round}: added ${fresh.length} (${countBodies(master).bodies} parts total)` });
+  }
+
+  fitCamera(master);
+  await renderStates(master, path.join(runDir, 'final'), standardStates(), { browser });
+  fs.writeFileSync(path.join(runDir, 'scene.json'), JSON.stringify(master, null, 2));
+  const c = countBodies(master);
+  onProgress({ phase: 'done', msg: `Scene built: ${census.length} objects, ${c.bodies} parts`, bodies: c.bodies });
+  return { spec: master, objects: census.length, viewerPath: path.join(runDir, 'final', 'index.html') };
+}
