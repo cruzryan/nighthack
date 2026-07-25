@@ -164,9 +164,9 @@ async function buildOne(o, src, model, browser, runDir, rounds) {
   const centerX = Math.max(0, Math.min(1, (o.bbox[0] + o.bbox[2]) / 2)), centerY = Math.max(0, Math.min(1, (o.bbox[1] + o.bbox[3]) / 2));
   // x from horizontal position; z from MODEL-ESTIMATED DEPTH (not image row) so
   // near/far objects stop collapsing into one plane.
-  const sceneW = 12, sceneD = 13;
+  const sceneW = 16, sceneD = 24;
   const depth = (o.depth == null ? 0.5 : o.depth);
-  const z = (depth - 0.5) * sceneD - (centerY - 0.5) * 2; // far = +z (back), near = -z (front)
+  const z = (depth - 0.5) * sceneD - (centerY - 0.5) * 3; // far = +z (back), near = -z (front)
   const x = (centerX - 0.5) * sceneW;
   if (o.category === 'person') return humanoid(o, x, z);
   if (rounds <= 0 || SIMPLE.has(o.category)) { const b = primFor(o, x, z); if (o.moves !== 'none' && !b[0].motion) b[0].motion = { type: o.moves, axis: [0, 1, 0], rate: 1.2 }; return b; }
