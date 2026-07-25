@@ -103,6 +103,10 @@
   #veil{position:absolute;inset:0;background:rgba(8,11,14,.72);backdrop-filter:blur(2px);display:none;
     align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-size:13px}
   #veil.on{display:flex}
+  #veilBar{width:min(420px,60%);height:8px;background:#1b222b;border-radius:6px;overflow:hidden;display:none;border:1px solid var(--border)}
+  #veilBar.on{display:block}
+  #veilBarFill{height:100%;width:0;background:linear-gradient(90deg,var(--accent-dim),var(--accent));border-radius:6px;transition:width .25s ease}
+  #veilCount{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -185,7 +189,7 @@
         <h2>No environment yet</h2>
         <p>Drop a photo on the left, add an optional description, and hit <b>Build environment</b>. You’ll get a 3D world you can orbit and interact with.</p>
       </div>
-      <div id="veil"><div class="spin" style="width:22px;height:22px;border-width:3px"></div><span id="veilMsg">Working…</span></div>
+      <div id="veil"><div class="spin" style="width:22px;height:22px;border-width:3px"></div><span id="veilMsg">Working…</span><div id="veilBar"><div id="veilBarFill"></div></div><span id="veilCount"></span></div>
     </div>
   </div>
 </div>

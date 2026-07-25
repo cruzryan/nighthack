@@ -47,7 +47,14 @@ $('#prompt').oninput = updateGo;
 // ---------- logging ----------
 const logEl = $('#log');
 function addMsg(cls, html) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; logEl.appendChild(d); d.scrollIntoView({ block: 'end' }); return d; }
-function veil(on, msg) { $('#veil').classList.toggle('on', on); if (msg) $('#veilMsg').textContent = msg; }
+function veil(on, msg) { $('#veil').classList.toggle('on', on); if (msg) $('#veilMsg').textContent = msg; if (!on) bar(0, 0); }
+function bar(done, total) {
+  const b = $('#veilBar'), f = $('#veilBarFill'), c = $('#veilCount');
+  if (!total) { b.classList.remove('on'); c.textContent = ''; return; }
+  b.classList.add('on');
+  f.style.width = Math.min(100, Math.round(done / total * 100)) + '%';
+  c.textContent = done + ' / ' + total + ' objects';
+}
 
 // ---------- build / refine ----------
 $('#go').onclick = () => state.sessionId ? refine() : build();
@@ -98,9 +105,10 @@ function handleEvent(ev, actEl) {
     const n = ev.round ?? ev.iter, f = ev.fidelity ?? ev.score;
     addMsg('sys', `Round ${n}: <span class="sc">${Math.round((f || 0) * 100)}%</span> fidelity` + (ev.msg && ev.msg.includes('—') ? ' · ' + esc(ev.msg.split('—')[1].trim()) : ''));
   }
-  if (ev.phase === 'detected') addMsg('sys', `Found <b>${(ev.objects || []).length}</b> objects: ${esc((ev.objects || []).join(', '))}`);
-  if (ev.phase === 'object') addMsg('sys', esc(ev.msg));
+  if (ev.phase === 'detected') { addMsg('sys', `Found <b>${ev.total || (ev.objects || []).length}</b> objects — building in parallel…`); bar(0, ev.total || (ev.objects || []).length); }
+  if (ev.phase === 'object' && ev.total) bar(ev.done, ev.total);   // live progress, no log spam
   if (ev.phase === 'result') {
+    bar(0, 0);
     actEl.className = 'msg sys';
     actEl.innerHTML = `Done — <span class="sc">${ev.score != null ? Math.round(ev.score * 100) + '%' : '✓'}</span> · ${ev.bodies} parts, ${ev.joints} movable`;
     applyResult(ev);
