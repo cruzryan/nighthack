@@ -184,10 +184,8 @@ async function loadRecent() {
     box.innerHTML = '';
     for (const s of list) {
       const chip = document.createElement('button');
-      chip.style.cssText = 'background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit';
-      chip.innerHTML = `${esc(s.name || 'scene')} <span style="color:var(--faint)">· ${s.joints}◧</span>`;
-      chip.onmouseenter = () => chip.style.borderColor = 'var(--accent)';
-      chip.onmouseleave = () => chip.style.borderColor = 'var(--border2)';
+      chip.className = 'btn';
+      chip.innerHTML = `${esc(s.name || 'scene')} <span style="color:var(--faint)">${s.joints} moving</span>`;
       chip.onclick = () => { applyResult(s); addMsg('sys', `Loaded <b>${esc(s.name || 'scene')}</b> — chat to keep refining it.`); };
       box.appendChild(chip);
     }

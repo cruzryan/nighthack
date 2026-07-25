@@ -6,107 +6,124 @@
 <title>img2env — photo → interactive RL environment</title>
 <style>
   :root{
-    --bg:#0d1014; --panel:#141a21; --panel2:#0f141a; --border:#232c37; --border2:#2d3946;
-    --text:#e7eef6; --muted:#8b98a8; --faint:#5d6b7a;
-    --accent:#43d9a3; --accent-dim:#1f6f57; --amber:#f0b429; --red:#f2545b;
-    --shadow:0 8px 30px rgba(0,0,0,.35);
+    --bg:#ffffff; --panel:#ffffff; --sunken:#fafafa; --hover:#f4f4f5;
+    --border:#e4e4e7; --border-strong:#d4d4d8;
+    --text:#18181b; --muted:#71717a; --faint:#a1a1aa;
+    --accent:#2563eb; --accent-soft:#eff4ff;
+    --ok:#15803d; --amber:#b45309; --red:#b91c1c; --red-soft:#fef2f2;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:'Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-    font-size:14px;-webkit-font-smoothing:antialiased}
-  .mono{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace}
-  #app{display:grid;grid-template-columns:390px 1fr;height:100vh}
+    font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button,input,select,textarea{font:inherit;color:inherit}
+  #app{display:grid;grid-template-columns:344px 1fr;height:100vh}
+
+  /* ---------- primitives ---------- */
+  .btn{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:6px;
+    padding:5px 10px;font-size:12.5px;cursor:pointer}
+  .btn:hover:not(:disabled){background:var(--hover);border-color:var(--border-strong)}
+  .btn:disabled{color:var(--faint);cursor:not-allowed}
+  .btn.quiet{border-color:transparent;color:var(--muted)}
+  .btn.quiet:hover:not(:disabled){background:var(--hover);border-color:var(--border)}
+  .label{font-size:12px;color:var(--muted);margin:0 0 6px;font-weight:500}
+  .sep{color:var(--border-strong)}
 
   /* ---------- left ---------- */
   #left{display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--border);min-height:0}
-  .brand{padding:16px 18px 12px;border-bottom:1px solid var(--border)}
-  .brand h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
-  .brand p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.4}
+  .brand{display:flex;align-items:baseline;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border)}
+  .brand h1{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+  .brand .tag{font-size:12px;color:var(--faint)}
+  .brand #newScene{margin-left:auto}
 
-  .scroll{flex:1;overflow-y:auto;padding:14px 16px;min-height:0}
-  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:8px}
+  .scroll{flex:1;overflow-y:auto;padding:16px 18px;min-height:0}
+  .scroll::-webkit-scrollbar{width:10px}
+  .scroll::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:10px;border:3px solid var(--panel)}
+  .block+.block{margin-top:18px}
+  .lede{color:var(--muted);font-size:12.5px;margin:0 0 16px}
 
-  .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:0 0 7px;font-weight:600}
+  /* segmented control */
+  .seg{display:flex;background:var(--sunken);border:1px solid var(--border);border-radius:7px;padding:2px;gap:2px}
+  .modeBtn{flex:1;background:transparent;border:1px solid transparent;color:var(--muted);border-radius:5px;
+    padding:6px 8px;font-size:12.5px;cursor:pointer}
+  .modeBtn:hover{color:var(--text)}
+  .modeBtn.on{background:var(--panel);border-color:var(--border);color:var(--text);font-weight:500}
 
-  #drop{border:1.5px dashed var(--border2);border-radius:12px;padding:16px;text-align:center;color:var(--muted);
-    cursor:pointer;transition:.15s;background:var(--panel2)}
-  #drop:hover,#drop.over{border-color:var(--accent);color:var(--text);background:#111820}
-  #drop b{color:var(--text)}
-  #drop .sub{font-size:11.5px;margin-top:3px;color:var(--faint)}
+  #drop{border:1px dashed var(--border-strong);border-radius:7px;padding:18px 14px;text-align:center;
+    color:var(--muted);cursor:pointer;background:var(--sunken)}
+  #drop:hover,#drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  #drop b{color:var(--text);font-weight:550}
+  #drop .sub{font-size:12px;margin-top:3px;color:var(--faint)}
   #thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-  .thumb{position:relative;width:60px;height:60px;border-radius:9px;overflow:hidden;border:1px solid var(--border2);background:#000}
-  .thumb img{width:100%;height:100%;object-fit:cover}
-  .thumb .x{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.7);
-    color:#fff;font-size:11px;line-height:16px;text-align:center;cursor:pointer}
-  .thumb.new::after{content:'new';position:absolute;bottom:0;left:0;right:0;background:var(--accent-dim);
-    color:#eafff6;font-size:9px;text-align:center;letter-spacing:.05em}
+  .thumb{position:relative;width:56px;height:56px;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--sunken)}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb .x{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:4px;background:rgba(255,255,255,.9);
+    border:1px solid var(--border);color:var(--muted);font-size:11px;line-height:14px;text-align:center;cursor:pointer}
+  .thumb .x:hover{color:var(--red);border-color:var(--red)}
+  .thumb.new::after{content:'new';position:absolute;bottom:0;left:0;right:0;background:var(--accent);
+    color:#fff;font-size:9.5px;text-align:center;letter-spacing:.03em}
 
-  textarea{width:100%;background:var(--panel2);border:1px solid var(--border2);border-radius:10px;color:var(--text);
-    padding:10px 12px;resize:vertical;min-height:64px;font-family:inherit;font-size:13.5px;line-height:1.45;outline:none}
+  textarea{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:7px;
+    padding:9px 11px;resize:vertical;min-height:66px;font-size:13px;line-height:1.5;outline:none}
+  textarea::placeholder{color:var(--faint)}
   textarea:focus{border-color:var(--accent)}
-  .row{display:flex;gap:10px;margin-top:12px}
-  .row>div{flex:1}
-  select,input[type=range]{width:100%}
-  select{background:var(--panel2);border:1px solid var(--border2);border-radius:9px;color:var(--text);padding:8px 10px;font-family:inherit;outline:none}
+  select{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 8px;outline:none;font-size:12.5px}
   select:focus{border-color:var(--accent)}
-  .rng{display:flex;align-items:center;gap:9px}
-  .rng .v{width:16px;text-align:center;color:var(--accent);font-weight:600}
-  input[type=range]{accent-color:var(--accent)}
+  .row{display:flex;gap:12px}
+  .row>div{flex:1}
+  .rng{display:flex;align-items:center;gap:9px;height:31px}
+  .rng input{flex:1;accent-color:var(--accent)}
+  .rng .v{min-width:14px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 
-  .hint{margin-top:10px;font-size:11.5px;color:var(--faint);line-height:1.5;background:var(--panel2);
-    border:1px solid var(--border);border-radius:9px;padding:9px 11px}
-  .hint b{color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted);line-height:1.55;border-left:2px solid var(--border);padding:1px 0 1px 11px}
+  .hint b{color:var(--text);font-weight:550}
 
-  #go{margin:14px 16px;padding:12px;border:0;border-radius:11px;background:var(--accent);color:#04140d;
-    font-weight:700;font-size:14px;cursor:pointer;transition:.15s;letter-spacing:.01em}
-  #go:hover{filter:brightness(1.08)}
-  #go:disabled{background:var(--border2);color:var(--faint);cursor:not-allowed}
+  #go{margin:0 18px 18px;padding:10px;border:1px solid var(--text);border-radius:7px;background:var(--text);color:#fff;
+    font-weight:550;font-size:13px;cursor:pointer}
+  #go:hover:not(:disabled){background:#000}
+  #go:disabled{background:var(--sunken);border-color:var(--border);color:var(--faint);cursor:not-allowed}
 
   /* conversation */
-  #log{display:flex;flex-direction:column;gap:9px;margin-top:6px}
-  .msg{border-radius:10px;padding:9px 12px;font-size:12.5px;line-height:1.45;max-width:100%}
-  .msg.you{background:#122b23;border:1px solid #1c4436;align-self:flex-end}
-  .msg.sys{background:var(--panel2);border:1px solid var(--border);color:var(--muted)}
-  .msg.sys.act{border-color:var(--accent-dim)}
-  .msg.err{background:#2a1416;border:1px solid #5a2229;color:#ffb4b4}
-  .msg .sc{color:var(--amber);font-weight:700}
-  .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--faint);border-top-color:var(--accent);
-    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px;margin-right:6px}
+  #log{display:flex;flex-direction:column;gap:7px}
+  .msg{border-radius:7px;padding:7px 10px;font-size:12.5px;line-height:1.5;max-width:100%;border:1px solid var(--border)}
+  .msg.you{background:var(--accent-soft);border-color:#dbe6ff;align-self:flex-end}
+  .msg.sys{background:var(--sunken);color:var(--muted)}
+  .msg.sys.act{background:var(--panel)}
+  .msg.err{background:var(--red-soft);border-color:#fecaca;color:var(--red)}
+  .msg .sc{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+  .spin{display:inline-block;width:10px;height:10px;border:1.5px solid var(--border-strong);border-top-color:var(--text);
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px;margin-right:7px}
   @keyframes sp{to{transform:rotate(360deg)}}
 
   /* ---------- right ---------- */
-  #right{display:flex;flex-direction:column;min-width:0;background:var(--panel2)}
-  #bar{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
-  .stat{display:flex;flex-direction:column;line-height:1.15}
-  .stat .n{font-size:15px;font-weight:700}
-  .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
-  .stat .n.acc{color:var(--accent)} .stat .n.amb{color:var(--amber)}
+  #right{display:flex;flex-direction:column;min-width:0;background:var(--sunken)}
+  #bar{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+  #meta{display:flex;align-items:baseline;gap:7px;min-width:0}
+  #sName{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw}
+  #stats{color:var(--muted);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #stats b{font-weight:550;color:var(--text)}
   #bar .sp{flex:1}
-  .btn{background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 11px;
-    font-size:12.5px;cursor:pointer;transition:.15s;font-family:inherit}
-  .btn:hover{border-color:var(--accent);color:var(--accent)}
-  .btn:disabled{opacity:.4;cursor:not-allowed}
-  .btn.ghost{background:transparent}
-  .modeBtn{background:var(--panel2);border:1px solid var(--border2);color:var(--muted);border-radius:9px;padding:9px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s}
-  .modeBtn:hover{color:var(--text)}
-  .modeBtn.on{background:#122b23;border-color:var(--accent-dim);color:var(--accent);font-weight:600}
+  #bar .group{display:flex;gap:6px}
 
   #stage{flex:1;position:relative;min-height:0}
-  #frame{width:100%;height:100%;border:0;background:var(--panel2)}
+  #frame{width:100%;height:100%;border:0;background:var(--bg);display:block}
   #empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    color:var(--faint);gap:12px;text-align:center;padding:30px}
-  #empty svg{opacity:.5}
-  #empty h2{margin:0;font-weight:600;color:var(--muted);font-size:16px}
-  #empty p{margin:0;max-width:340px;line-height:1.5;font-size:13px}
-  #veil{position:absolute;inset:0;background:rgba(8,11,14,.72);backdrop-filter:blur(2px);display:none;
-    align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-size:13px}
+    color:var(--muted);gap:10px;text-align:center;padding:32px}
+  #empty svg{color:var(--border-strong)}
+  #empty h2{margin:0;font-weight:600;color:var(--text);font-size:14px}
+  #empty p{margin:0;max-width:330px;font-size:12.5px;color:var(--muted)}
+  #veil{position:absolute;inset:0;background:rgba(255,255,255,.82);display:none;
+    align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-size:12.5px}
   #veil.on{display:flex}
-  #veilBar{width:min(420px,60%);height:8px;background:#1b222b;border-radius:6px;overflow:hidden;display:none;border:1px solid var(--border)}
+  #veilBar{width:min(360px,55%);height:4px;background:var(--border);border-radius:4px;overflow:hidden;display:none}
   #veilBar.on{display:block}
-  #veilBarFill{height:100%;width:0;background:linear-gradient(90deg,var(--accent-dim),var(--accent));border-radius:6px;transition:width .25s ease}
+  #veilBarFill{height:100%;width:0;background:var(--accent);transition:width .25s ease}
   #veilCount{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+  #refbox{position:absolute;top:14px;right:14px;margin:0;display:none;z-index:6;
+    background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:5px}
+  #refimg{display:block;max-width:220px;max-height:200px;border-radius:4px}
+  #refcap{color:var(--faint);font-size:11px;text-align:center;padding:4px 0 1px}
 </style>
 </head>
 <body>
@@ -114,35 +131,46 @@
   <!-- LEFT -->
   <div id="left">
     <div class="brand">
-      <h1><span class="dot"></span> img2env <button id="newScene" title="Start a new scene" style="margin-left:auto;background:transparent;border:1px solid var(--border2);color:var(--muted);border-radius:7px;padding:3px 9px;font-size:12px;cursor:pointer;display:none">＋ New</button></h1>
-      <p>Turn photo(s) into an <b style="color:var(--text)">interactive</b>, articulated 3D world — open drawers &amp; doors. Built for RL. Keep chatting to refine; add more angles to enrich.</p>
+      <h1>img2env</h1>
+      <span class="tag">photo → interactive 3D</span>
+      <button class="btn quiet" id="newScene" title="Start a new scene" style="display:none">New</button>
     </div>
     <div class="scroll">
-      <div id="recentWrap" style="display:none;margin-bottom:16px">
-        <p class="label">Recent scenes — click to open &amp; keep refining</p>
-        <div id="recent" style="display:flex;flex-wrap:wrap;gap:7px"></div>
-      </div>
-      <p class="label">What are you reconstructing?</p>
-      <div id="modeToggle" style="display:flex;gap:6px;margin-bottom:14px">
-        <button class="modeBtn on" data-mode="object" style="flex:1">Single object</button>
-        <button class="modeBtn" data-mode="scene" style="flex:1">Scene · multi-object</button>
-      </div>
-      <p class="label">Reference images</p>
-      <div id="drop">
-        <b>Drop photos</b> or click to browse
-        <div class="sub">front / angles / inside a drawer — more views = better &amp; correct scale</div>
-      </div>
-      <input id="file" type="file" accept="image/*" multiple hidden/>
-      <div id="thumbs"></div>
+      <p class="lede">Turn photos into an articulated 3D world you can open, orbit and train on. Chat to refine; add angles to enrich.</p>
 
-      <p class="label" style="margin-top:16px" id="promptLabel">Describe it (optional)</p>
-      <textarea id="prompt" placeholder="e.g. a wooden nightstand ~0.5 m wide with 2 drawers and a cabinet door. It sits 1 m from the camera."></textarea>
-
-      <div class="hint" id="firstHint">
-        <b>Tips:</b> mention real <b>sizes &amp; distances</b> (“0.9 m wide”, “items 1 m apart”) and it will scale things correctly. After building, <b>chat</b> to fix anything (“make legs darker”, “drawer opens further”) or drop a <b>new angle</b> to enrich the model.
+      <div id="recentWrap" class="block" style="display:none">
+        <p class="label">Recent scenes</p>
+        <div id="recent" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       </div>
 
-      <div class="row" id="opts">
+      <div class="block">
+        <p class="label">What are you reconstructing?</p>
+        <div id="modeToggle" class="seg">
+          <button class="modeBtn on" data-mode="object">Single object</button>
+          <button class="modeBtn" data-mode="scene">Scene · multi-object</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <p class="label">Reference images</p>
+        <div id="drop">
+          <b>Drop photos</b> or click to browse
+          <div class="sub">front / angles / inside a drawer — more views = better scale</div>
+        </div>
+        <input id="file" type="file" accept="image/*" multiple hidden/>
+        <div id="thumbs"></div>
+      </div>
+
+      <div class="block">
+        <p class="label" id="promptLabel">Describe it (optional)</p>
+        <textarea id="prompt" placeholder="e.g. a wooden nightstand ~0.5 m wide with 2 drawers and a cabinet door, 1 m from the camera."></textarea>
+      </div>
+
+      <div class="block hint" id="firstHint">
+        Mention real <b>sizes and distances</b> and everything scales correctly. After building, chat to fix anything or drop a new angle to enrich the model.
+      </div>
+
+      <div class="block row" id="opts">
         <div>
           <p class="label">Quality</p>
           <select id="quality">
@@ -157,7 +185,7 @@
         </div>
       </div>
 
-      <div id="log"></div>
+      <div id="log" class="block"></div>
     </div>
     <button id="go" disabled>Build environment</button>
   </div>
@@ -165,31 +193,39 @@
   <!-- RIGHT -->
   <div id="right">
     <div id="bar">
-      <div class="stat"><span class="n" id="sName">—</span><span class="l">object</span></div>
-      <div class="stat"><span class="n" id="sParts">0</span><span class="l">parts</span></div>
-      <div class="stat"><span class="n acc" id="sJoints">0</span><span class="l">moving</span></div>
-      <div class="stat"><span class="n amb" id="sScore">—</span><span class="l">fidelity</span></div>
-      <div class="stat"><span class="n" id="sCost">$0</span><span class="l">cost</span></div>
+      <div id="meta">
+        <span id="sName">—</span>
+        <span id="stats">
+          <b id="sParts">0</b> parts <span class="sep">·</span>
+          <b id="sJoints">0</b> moving <span class="sep">·</span>
+          <b id="sScore">—</b> fidelity <span class="sep">·</span>
+          <b id="sCost">$0</b>
+        </span>
+      </div>
       <div class="sp"></div>
-      <button class="btn" id="bOpen" disabled>Open all</button>
-      <button class="btn" id="bClose" disabled>Close</button>
-      <button class="btn" id="bPhoto" disabled>Photo</button>
-      <button class="btn ghost" id="bJson" disabled>scene.json</button>
-      <button class="btn ghost" id="bMjcf" disabled>MuJoCo</button>
-      <button class="btn ghost" id="bTab" disabled>↗</button>
+      <div class="group">
+        <button class="btn" id="bOpen" disabled>Open all</button>
+        <button class="btn" id="bClose" disabled>Close</button>
+        <button class="btn" id="bPhoto" disabled>Photo</button>
+      </div>
+      <div class="group">
+        <button class="btn quiet" id="bJson" disabled>scene.json</button>
+        <button class="btn quiet" id="bMjcf" disabled>MuJoCo</button>
+        <button class="btn quiet" id="bTab" disabled title="Open in new tab">↗</button>
+      </div>
     </div>
     <div id="stage">
       <iframe id="frame" style="display:none"></iframe>
-      <figure id="refbox" style="position:absolute;top:14px;right:14px;margin:0;display:none;z-index:6">
-        <img id="refimg" style="display:block;max-width:250px;max-height:220px;border-radius:10px 10px 0 0;border:2px solid var(--border2);border-bottom:0;background:#fff"/>
-        <figcaption style="background:var(--panel);color:var(--muted);font-size:10px;text-align:center;padding:3px;border:2px solid var(--border2);border-top:0;border-radius:0 0 10px 10px;text-transform:uppercase;letter-spacing:.06em">source photo</figcaption>
+      <figure id="refbox">
+        <img id="refimg"/>
+        <figcaption id="refcap">source photo</figcaption>
       </figure>
       <div id="empty">
-        <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
         <h2>No environment yet</h2>
-        <p>Drop a photo on the left, add an optional description, and hit <b>Build environment</b>. You’ll get a 3D world you can orbit and interact with.</p>
+        <p>Drop a photo on the left, add an optional description, then build. You'll get a 3D world you can orbit and interact with.</p>
       </div>
-      <div id="veil"><div class="spin" style="width:22px;height:22px;border-width:3px"></div><span id="veilMsg">Working…</span><div id="veilBar"><div id="veilBarFill"></div></div><span id="veilCount"></span></div>
+      <div id="veil"><div class="spin" style="width:20px;height:20px;border-width:2px;margin:0"></div><span id="veilMsg">Working…</span><div id="veilBar"><div id="veilBarFill"></div></div><span id="veilCount"></span></div>
     </div>
   </div>
 </div>

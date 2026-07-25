@@ -390,48 +390,49 @@ export function compileHTML(spec) {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${(spec.meta?.name || 'scene')} — img2env</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:${spec.environment.background};font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif}
-  #hud{position:fixed;left:12px;top:12px;z-index:10;color:#111;background:rgba(255,255,255,.72);
-       backdrop-filter:blur(6px);padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.4;
-       box-shadow:0 2px 12px rgba(0,0,0,.12);max-width:280px}
-  #hud b{font-size:14px}
-  #hud .k{color:#555}
-  @media (prefers-color-scheme: dark){ #hud{background:rgba(20,24,30,.72);color:#eee} #hud .k{color:#aab} }
+  :root{--vb:#e4e4e7;--vb2:#d4d4d8;--vt:#18181b;--vm:#71717a;--vf:#a1a1aa;--va:#2563eb;--vp:#ffffff;--vs:#fafafa}
+  html,body{margin:0;height:100%;overflow:hidden;background:${spec.environment.background};
+    font-family:'Inter',ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif;font-size:13px;color:var(--vt)}
+  button,input{font:inherit;color:inherit}
+  #hud{position:fixed;left:12px;top:12px;z-index:10;background:var(--vp);border:1px solid var(--vb);
+       padding:8px 11px;border-radius:7px;line-height:1.45;max-width:280px}
+  #hud b{font-weight:600}
+  #hud .k{color:var(--vm);font-size:12px}
   /* inspector */
-  #insp-toggle{position:fixed;left:12px;bottom:12px;z-index:11;background:rgba(20,24,30,.85);color:#dfe7f0;border:1px solid #333c48;
-    border-radius:9px;padding:8px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
-  #insp-toggle:hover{border-color:#43d9a3;color:#43d9a3}
-  #play-toggle{position:fixed;left:104px;bottom:12px;z-index:11;background:rgba(20,24,30,.85);color:#43d9a3;border:1px solid #1f6f57;
-    border-radius:9px;padding:8px 12px;font-size:12.5px;cursor:pointer;font-family:inherit;display:none}
-  #play-toggle:hover{background:#12241f}
-  #insp-panel{position:fixed;left:12px;bottom:52px;z-index:11;width:250px;max-height:70vh;display:none;flex-direction:column;
-    background:rgba(16,20,26,.94);backdrop-filter:blur(8px);border:1px solid #2a323d;border-radius:12px;padding:12px;
-    color:#e7eef6;font-size:12px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .vbtn{position:fixed;bottom:12px;z-index:11;background:var(--vp);border:1px solid var(--vb);color:var(--vt);
+    border-radius:6px;padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .vbtn:hover{background:var(--vs);border-color:var(--vb2)}
+  #insp-toggle{left:12px}
+  #play-toggle{left:92px;display:none}
+  #insp-panel{position:fixed;left:12px;bottom:50px;z-index:11;width:248px;max-height:70vh;display:none;flex-direction:column;
+    background:var(--vp);border:1px solid var(--vb);border-radius:8px;padding:11px;font-size:12px}
   #insp-panel.open{display:flex}
-  .insp-sec{font-size:10px;letter-spacing:.08em;color:#7a8896;text-transform:uppercase;margin:10px 0 6px;font-weight:600}
+  .insp-sec{font-size:11.5px;color:var(--vm);margin:12px 0 6px;font-weight:500}
   .insp-sec:first-child{margin-top:0}
-  .insp-views,.insp-tool{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
-  #insp-panel button{background:#0f141a;border:1px solid #2d3946;color:#cdd6e0;border-radius:7px;padding:6px;font-size:11.5px;cursor:pointer;font-family:inherit}
-  #insp-panel button:hover{border-color:#43d9a3;color:#43d9a3}
-  .insp-tool{display:flex;align-items:center;gap:8px;margin:5px 0;grid-template-columns:none}
-  .insp-tool input[type=range]{flex:1;accent-color:#43d9a3}
-  .insp-reset{width:100%;margin-top:6px}
-  #insp-list{overflow-y:auto;margin-top:2px;display:flex;flex-direction:column;gap:2px}
-  #insp-list::-webkit-scrollbar{width:6px}#insp-list::-webkit-scrollbar-thumb{background:#2d3946;border-radius:6px}
-  .insp-row{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;cursor:pointer}
-  .insp-row:hover{background:#1a212a}
-  .insp-row.sel{background:#12241f;outline:1px solid #1f6f57}
+  .insp-views{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
+  #insp-panel button{background:var(--vp);border:1px solid var(--vb);color:var(--vt);border-radius:5px;padding:5px;font-size:11.5px;cursor:pointer}
+  #insp-panel button:hover{background:var(--vs);border-color:var(--vb2)}
+  .insp-tool{display:flex;align-items:center;gap:8px;margin:6px 0;color:var(--vm)}
+  .insp-tool input[type=range]{flex:1;accent-color:var(--va)}
+  .insp-tool input[type=checkbox]{accent-color:var(--va)}
+  .insp-reset{width:100%;margin-top:4px}
+  #insp-list{overflow-y:auto;margin-top:2px;display:flex;flex-direction:column;gap:1px}
+  #insp-list::-webkit-scrollbar{width:8px}
+  #insp-list::-webkit-scrollbar-thumb{background:var(--vb2);border-radius:8px;border:2px solid var(--vp)}
+  .insp-row{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:5px;cursor:pointer}
+  .insp-row:hover{background:var(--vs)}
+  .insp-row.sel{background:#eff4ff;box-shadow:inset 0 0 0 1px #dbe6ff}
   .insp-row.off{opacity:.4}
-  .insp-row .sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto;border:1px solid rgba(255,255,255,.15)}
+  .insp-row .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;border:1px solid rgba(0,0,0,.12)}
   .insp-row .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .insp-row .gm{color:#6b7886;font-size:10px}
-  .insp-row .acts{display:flex;gap:2px}
-  .insp-row .acts button{padding:2px 5px;font-size:11px;background:transparent;border:0;color:#8b98a8}
-  .insp-row .acts button:hover{color:#43d9a3}
+  .insp-row .gm{color:var(--vf);font-size:10.5px}
+  .insp-row .acts{display:flex;gap:1px}
+  .insp-row .acts button{padding:1px 4px;font-size:11px;background:transparent;border:1px solid transparent;color:var(--vf)}
+  .insp-row .acts button:hover{color:var(--va);background:transparent;border-color:transparent}
 </style></head><body>
-<div id="hud"><b>${spec.meta?.name || 'scene'}</b><br><span class="k">drag to orbit · scroll to zoom · click drawers/doors to open</span></div>
-<button id="insp-toggle">⚙ Inspect</button>
-<button id="play-toggle">⏸ Pause motion</button>
+<div id="hud"><b>${spec.meta?.name || 'scene'}</b><br><span class="k">drag to orbit · scroll to zoom · click drawers &amp; doors</span></div>
+<button id="insp-toggle" class="vbtn">Inspect</button>
+<button id="play-toggle" class="vbtn">Pause motion</button>
 <div id="insp-panel">
   <div class="insp-sec">Camera views</div>
   <div class="insp-views">
@@ -472,7 +473,7 @@ ${THREE_SRC}
     Array.prototype.forEach.call(document.querySelectorAll('.insp-row'),function(r){ r.classList.remove('off','sel'); }); };
   document.getElementById('insp-toggle').onclick=function(){ document.getElementById('insp-panel').classList.toggle('open'); };
   if(api.hasMotion&&api.hasMotion()){ var pb=document.getElementById('play-toggle'); pb.style.display='block'; var on=true;
-    pb.onclick=function(){ on=!on; api.play(on); pb.textContent=on?'⏸ Pause motion':'▶ Play motion'; }; }
+    pb.onclick=function(){ on=!on; api.play(on); pb.textContent=on?'Pause motion':'Play motion'; }; }
 })();</script>
 </body></html>`;
 }
