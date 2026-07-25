@@ -431,9 +431,11 @@ export function compileHTML(spec) {
   .insp-row .sw{width:10px;height:10px;flex:0 0 auto;border:1px solid rgba(0,0,0,.12)}
   .insp-row .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .insp-row .gm{color:var(--vf);font-size:10.5px}
-  .insp-row .acts{display:flex;gap:1px}
-  .insp-row .acts button{height:18px;padding:0 4px;font-size:11px;background:transparent;border:1px solid transparent;color:var(--vf)}
-  .insp-row .acts button:hover{color:var(--va);background:transparent;border-color:transparent}
+  .insp-row .acts{display:flex;gap:2px;opacity:0}
+  .insp-row:hover .acts,.insp-row.sel .acts,.insp-row.off .acts{opacity:1}
+  #insp-panel .insp-row .acts button{height:16px;padding:0 3px;font-size:11px;line-height:1;
+    background:transparent;border:0;color:var(--vf)}
+  #insp-panel .insp-row .acts button:hover{color:var(--vt)}
 </style></head><body>
 <div id="hud"><b>${spec.meta?.name || 'scene'}</b><br><span class="k">drag to orbit · scroll to zoom · click drawers &amp; doors</span></div>
 <button id="insp-toggle" class="vbtn">Inspect</button>
