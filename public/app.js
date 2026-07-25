@@ -45,7 +45,12 @@ paintRange(iters);
 function updateGo() {
   const go = $('#go');
   if (state.busy) { go.disabled = true; return; }
-  if (!state.sessionId) { go.disabled = state.images.length === 0; go.textContent = 'Build environment'; }
+  if (!state.sessionId) {
+    // reconstruction is driven by the photo — a description alone can't build
+    const noImg = state.images.length === 0;
+    go.disabled = noImg;
+    go.textContent = noImg ? 'Add a photo to build' : 'Build environment';
+  }
   else { const hasMsg = $('#prompt').value.trim() || state.pending.length; go.disabled = !hasMsg; go.textContent = state.pending.length ? `Enrich (+${state.pending.length} image)` : 'Send refinement'; }
 }
 $('#prompt').oninput = updateGo;
