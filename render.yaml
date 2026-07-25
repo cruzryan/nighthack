@@ -1,0 +1,25 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+# Deploy with Blueprints ▸ New Blueprint Instance, then set OPENAI_API_KEY.
+services:
+  - type: web
+    name: img2env
+    runtime: docker
+    plan: standard          # 2 GB RAM: Chromium + a 400-part scene will OOM on starter
+    region: oregon
+    healthCheckPath: /
+    autoDeploy: true
+    disk:
+      # scenes, renders and uploaded photos; without this every deploy wipes
+      # them and the "Recent scenes" list resets to the bundled examples
+      name: scenes
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false         # set in the dashboard; never commit it
+      - key: RUNS_DIR
+        value: /var/data/runs
+      - key: DEV_MODEL
+        value: gpt-4o-mini
+      - key: QUALITY_MODEL
+        value: gpt-4o

@@ -7,7 +7,8 @@ import OpenAI from 'openai';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const VENDOR = path.join(ROOT, 'vendor');
-export const RUNS = path.join(ROOT, 'runs');
+// RUNS_DIR points scenes at a mounted disk in deployment; local runs stay in-repo.
+export const RUNS = process.env.RUNS_DIR ? path.resolve(process.env.RUNS_DIR) : path.join(ROOT, 'runs');
 
 // The single self-contained three.js build we inline into every scene.
 export const THREE_SRC = fs.readFileSync(path.join(VENDOR, 'three.min.js'), 'utf8');

@@ -58,6 +58,39 @@ d = mujoco.MjData(m); d.qpos[0] = 0.2
 for _ in range(50): mujoco.mj_step(m, d)         # drawer opens, simulates
 ```
 
+## Deploy on Render
+
+The repo ships a `Dockerfile` (Playwright base image, so headless Chromium is present) and a
+`render.yaml` blueprint. In Render: **Blueprints ▸ New Blueprint Instance**, point it at this
+repo, then set `OPENAI_API_KEY` — it's the one variable marked `sync: false`, everything else
+comes from the blueprint.
+
+| setting | value | why |
+|---|---|---|
+| runtime | docker | Chromium + libs can't be installed on the native runtime |
+| plan | `standard` (2 GB) | Chromium with SwiftShader plus a few-hundred-part scene OOMs on `starter` |
+| disk | `/var/data`, 5 GB | scenes/renders/photos live in `RUNS_DIR`; without a disk every deploy wipes them |
+| health check | `/` | the app serves the UI there as soon as it's listening |
+
+Notes:
+
+- `RUNS_DIR` overrides where scenes are written (defaults to `./runs` locally). The blueprint
+  points it at the mounted disk.
+- Sessions are in memory and rehydrated from `RUNS_DIR` at boot, so a restart keeps the scene
+  list — but boot **re-renders every stored scene**, so start-up time grows with the number of
+  scenes. Prune the disk if it gets slow.
+- A persistent disk pins the service to one instance and disables zero-downtime deploys. That
+  suits this app (single in-memory session map), but don't scale it out.
+- Builds stream NDJSON for minutes at a time; the server sends a heartbeat every 20 s so proxies
+  don't drop the connection.
+
+To run the container locally:
+
+```bash
+docker build -t img2env .
+docker run -p 10000:10000 -e OPENAI_API_KEY=sk-... -v img2env-data:/var/data img2env
+```
+
 ## Layout
 
 | path | role |

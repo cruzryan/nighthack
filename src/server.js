@@ -78,7 +78,13 @@ function ndjson(res) {
   res.setHeader('Content-Type', 'application/x-ndjson');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
-  return ev => { try { res.write(JSON.stringify(ev) + '\n'); } catch {} };
+  res.flushHeaders();
+  const send = ev => { try { res.write(JSON.stringify(ev) + '\n'); } catch {} };
+  // a single agent step can run for minutes; proxies hang up on idle streams
+  const beat = setInterval(() => send({ phase: 'ping' }), 20000);
+  const stop = () => clearInterval(beat);
+  res.on('close', stop); res.on('finish', stop);
+  return send;
 }
 
 function inputCount(runDir) {
