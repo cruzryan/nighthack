@@ -393,41 +393,46 @@ export function compileHTML(spec) {
   :root{--vb:#e4e4e7;--vb2:#d4d4d8;--vt:#18181b;--vm:#71717a;--vf:#a1a1aa;--va:#2563eb;--vp:#ffffff;--vs:#fafafa}
   html,body{margin:0;height:100%;overflow:hidden;background:${spec.environment.background};
     font-family:'Inter',ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif;font-size:13px;color:var(--vt)}
-  button,input{font:inherit;color:inherit}
+  button,input{font:inherit;color:inherit;border-radius:0}
   #hud{position:fixed;left:12px;top:12px;z-index:10;background:var(--vp);border:1px solid var(--vb);
-       padding:8px 11px;border-radius:7px;line-height:1.45;max-width:280px}
+       padding:8px 11px;line-height:1.45;max-width:280px}
   #hud b{font-weight:600}
   #hud .k{color:var(--vm);font-size:12px}
   /* inspector */
-  .vbtn{position:fixed;bottom:12px;z-index:11;background:var(--vp);border:1px solid var(--vb);color:var(--vt);
-    border-radius:6px;padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .vbtn{position:fixed;bottom:12px;z-index:11;height:28px;padding:0 11px;background:var(--vp);
+    border:1px solid var(--vb);color:var(--vt);font-size:12.5px;cursor:pointer}
   .vbtn:hover{background:var(--vs);border-color:var(--vb2)}
   #insp-toggle{left:12px}
-  #play-toggle{left:92px;display:none}
-  #insp-panel{position:fixed;left:12px;bottom:50px;z-index:11;width:248px;max-height:70vh;display:none;flex-direction:column;
-    background:var(--vp);border:1px solid var(--vb);border-radius:8px;padding:11px;font-size:12px}
+  #play-toggle{left:86px;display:none}
+  #insp-panel{position:fixed;left:12px;bottom:48px;z-index:11;width:250px;max-height:70vh;display:none;flex-direction:column;
+    background:var(--vp);border:1px solid var(--vb);font-size:12px}
   #insp-panel.open{display:flex}
-  .insp-sec{font-size:11.5px;color:var(--vm);margin:12px 0 6px;font-weight:500}
-  .insp-sec:first-child{margin-top:0}
-  .insp-views{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
-  #insp-panel button{background:var(--vp);border:1px solid var(--vb);color:var(--vt);border-radius:5px;padding:5px;font-size:11.5px;cursor:pointer}
+  .insp-sec{font-size:11.5px;color:var(--vm);font-weight:500;padding:9px 10px 6px;border-top:1px solid var(--vb)}
+  .insp-sec:first-child{border-top:0}
+  .insp-views{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:0 10px}
+  #insp-panel button{height:26px;background:var(--vp);border:1px solid var(--vb);color:var(--vt);
+    padding:0 6px;font-size:11.5px;cursor:pointer}
   #insp-panel button:hover{background:var(--vs);border-color:var(--vb2)}
-  .insp-tool{display:flex;align-items:center;gap:8px;margin:6px 0;color:var(--vm)}
-  .insp-tool input[type=range]{flex:1;accent-color:var(--va)}
-  .insp-tool input[type=checkbox]{accent-color:var(--va)}
-  .insp-reset{width:100%;margin-top:4px}
-  #insp-list{overflow-y:auto;margin-top:2px;display:flex;flex-direction:column;gap:1px}
-  #insp-list::-webkit-scrollbar{width:8px}
-  #insp-list::-webkit-scrollbar-thumb{background:var(--vb2);border-radius:8px;border:2px solid var(--vp)}
-  .insp-row{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:5px;cursor:pointer}
+  .insp-tool{display:flex;align-items:center;gap:8px;padding:0 10px;height:26px;color:var(--vm)}
+  .insp-tool input[type=range]{flex:1;min-width:0;appearance:none;background:transparent;height:14px;cursor:pointer;margin:0}
+  .insp-tool input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--vb2)}
+  .insp-tool input[type=range]::-webkit-slider-thumb{appearance:none;width:9px;height:13px;margin-top:-6px;background:var(--vt);border:0}
+  .insp-tool input[type=range]::-moz-range-track{height:2px;background:var(--vb2)}
+  .insp-tool input[type=range]::-moz-range-thumb{width:9px;height:13px;background:var(--vt);border:0;border-radius:0}
+  .insp-tool input[type=checkbox]{accent-color:var(--vt)}
+  .insp-reset{width:calc(100% - 20px);margin:6px 10px 10px}
+  #insp-list{overflow-y:auto;display:flex;flex-direction:column;padding-bottom:4px}
+  #insp-list::-webkit-scrollbar{width:9px}
+  #insp-list::-webkit-scrollbar-thumb{background:var(--vb2);border:3px solid var(--vp)}
+  .insp-row{display:flex;align-items:center;gap:7px;padding:4px 10px;cursor:pointer}
   .insp-row:hover{background:var(--vs)}
-  .insp-row.sel{background:#eff4ff;box-shadow:inset 0 0 0 1px #dbe6ff}
+  .insp-row.sel{background:#f0f5ff;box-shadow:inset 2px 0 0 var(--va)}
   .insp-row.off{opacity:.4}
-  .insp-row .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;border:1px solid rgba(0,0,0,.12)}
+  .insp-row .sw{width:10px;height:10px;flex:0 0 auto;border:1px solid rgba(0,0,0,.12)}
   .insp-row .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .insp-row .gm{color:var(--vf);font-size:10.5px}
   .insp-row .acts{display:flex;gap:1px}
-  .insp-row .acts button{padding:1px 4px;font-size:11px;background:transparent;border:1px solid transparent;color:var(--vf)}
+  .insp-row .acts button{height:18px;padding:0 4px;font-size:11px;background:transparent;border:1px solid transparent;color:var(--vf)}
   .insp-row .acts button:hover{color:var(--va);background:transparent;border-color:transparent}
 </style></head><body>
 <div id="hud"><b>${spec.meta?.name || 'scene'}</b><br><span class="k">drag to orbit · scroll to zoom · click drawers &amp; doors</span></div>

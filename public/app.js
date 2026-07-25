@@ -35,7 +35,13 @@ document.querySelectorAll('.modeBtn').forEach(btn => btn.onclick = () => {
   $('#drop').querySelector('.sub') && ($('#drop').querySelector('.sub').textContent =
     state.mode === 'scene' ? 'a photo of a table/desk with several objects' : 'front / angles / inside a drawer — more views = better');
 });
-$('#iters').oninput = e => $('#itersV').textContent = e.target.value;
+const iters = $('#iters');
+function paintRange(el) {
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--fill', pct + '%');
+}
+iters.oninput = e => { $('#itersV').textContent = e.target.value; paintRange(e.target); };
+paintRange(iters);
 function updateGo() {
   const go = $('#go');
   if (state.busy) { go.disabled = true; return; }
@@ -120,7 +126,8 @@ function applyResult(r) {
   state.images.forEach(i => i.isNew = false); renderThumbs();
   $('#empty').style.display = 'none';
   const f = $('#frame'); f.style.display = 'block'; f.src = r.viewerUrl + (r.viewerUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-  $('#sName').textContent = r.name || '—';
+  $('#bar').classList.remove('empty');
+  $('#sName').textContent = r.name || 'scene';
   $('#sParts').textContent = r.bodies;
   $('#sJoints').textContent = r.joints;
   $('#sScore').textContent = r.score != null ? Math.round(r.score * 100) + '%' : '—';
@@ -162,7 +169,8 @@ $('#newScene').onclick = () => {
   $('#firstHint').style.display = ''; $('#opts').style.display = '';
   $('#promptLabel').textContent = 'Describe it (optional)';
   $('#prompt').placeholder = 'e.g. a wooden nightstand ~0.5 m wide with 2 drawers and a cabinet door. It sits 1 m from the camera.';
-  ['#sName'].forEach(s => $(s).textContent = '—');
+  $('#bar').classList.add('empty');
+  $('#sName').textContent = 'No scene loaded';
   $('#sParts').textContent = '0'; $('#sJoints').textContent = '0'; $('#sScore').textContent = '—'; $('#sCost').textContent = '$0';
   ['#bOpen', '#bClose', '#bJson', '#bMjcf', '#bTab', '#bPhoto'].forEach(s => $(s).disabled = true);
   $('#refbox').style.display = 'none';
@@ -184,8 +192,7 @@ async function loadRecent() {
     box.innerHTML = '';
     for (const s of list) {
       const chip = document.createElement('button');
-      chip.className = 'btn';
-      chip.innerHTML = `${esc(s.name || 'scene')} <span style="color:var(--faint)">${s.joints} moving</span>`;
+      chip.innerHTML = `<span class="nm">${esc(s.name || 'scene')}</span><span class="mt">${s.joints} moving</span>`;
       chip.onclick = () => { applyResult(s); addMsg('sys', `Loaded <b>${esc(s.name || 'scene')}</b> — chat to keep refining it.`); };
       box.appendChild(chip);
     }
