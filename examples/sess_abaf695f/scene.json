@@ -1,0 +1,1008 @@
+{
+  "meta": {
+    "name": "aircraft_final_assembly_line",
+    "units": "m",
+    "notes": "Assumed aircraft fuselage diameter ~4m (typical for commercial jets), length of visible fuselage ~35m. Factory floor grid and human figures used for scale. Only visible parts modeled; some details omitted due to occlusion."
+  },
+  "camera": {
+    "azimuth_deg": 35,
+    "elevation_deg": 18,
+    "distance": 70.34509616748942,
+    "target": [
+      25,
+      17.5,
+      -1.1749999999999998
+    ],
+    "fov_deg": 55
+  },
+  "environment": {
+    "background": "#e7e7e7",
+    "ground": {
+      "color": "#bfc3c6",
+      "size": 12,
+      "visible": true
+    }
+  },
+  "bodies": [
+    {
+      "id": "fuselage_main",
+      "label": "aircraft fuselage",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 2,
+        "height": 35,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#b2c99a",
+        "roughness": 0.4,
+        "metalness": 0.7,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        25,
+        17.5,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": [
+        {
+          "id": "cockpit_section",
+          "label": "cockpit section",
+          "geometry": {
+            "type": "cylinder",
+            "radius": 2,
+            "height": 3.5,
+            "bevel": 0
+          },
+          "material": {
+            "color": "#b2c99a",
+            "roughness": 0.4,
+            "metalness": 0.7,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            -16,
+            0,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "wing_left",
+          "label": "left wing",
+          "geometry": {
+            "type": "extrude",
+            "depth": 1.2,
+            "shape": [
+              [
+                0,
+                0
+              ],
+              [
+                18,
+                1.2
+              ],
+              [
+                20,
+                2.5
+              ],
+              [
+                16,
+                5.5
+              ],
+              [
+                2,
+                6
+              ],
+              [
+                0,
+                5.5
+              ]
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6e8e7",
+            "roughness": 0.3,
+            "metalness": 0.7,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            -2,
+            0,
+            -4.2
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "wing_right",
+          "label": "right wing",
+          "geometry": {
+            "type": "extrude",
+            "depth": 1.2,
+            "shape": [
+              [
+                0,
+                0
+              ],
+              [
+                18,
+                1.2
+              ],
+              [
+                20,
+                2.5
+              ],
+              [
+                16,
+                5.5
+              ],
+              [
+                2,
+                6
+              ],
+              [
+                0,
+                5.5
+              ]
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6e8e7",
+            "roughness": 0.3,
+            "metalness": 0.7,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            -2,
+            0,
+            4.2
+          ],
+          "rotation_deg": [
+            0,
+            180,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "vertical_stabilizer",
+          "label": "vertical stabilizer",
+          "geometry": {
+            "type": "extrude",
+            "depth": 0.4,
+            "shape": [
+              [
+                0,
+                0
+              ],
+              [
+                0.8,
+                0
+              ],
+              [
+                1,
+                3.5
+              ],
+              [
+                0,
+                3.8
+              ]
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#1c2c4a",
+            "roughness": 0.3,
+            "metalness": 0.7,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            16,
+            2,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "windows",
+          "label": "fuselage windows",
+          "geometry": {
+            "type": "box",
+            "size": [
+              0.04,
+              0.04,
+              0.02
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#b8d0e6",
+            "roughness": 0.1,
+            "metalness": 0.1,
+            "opacity": 0.7,
+            "emissive": "#000000",
+            "kind": "glass"
+          },
+          "position": [
+            0,
+            0.3,
+            2.05
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "assembly_platform_1",
+      "label": "yellow assembly platform",
+      "geometry": {
+        "type": "box",
+        "size": [
+          14,
+          4.5,
+          12
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#f7b731",
+        "roughness": 0.6,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        20,
+        17.5,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": [
+        {
+          "id": "stairs_1",
+          "label": "platform stairs",
+          "geometry": {
+            "type": "box",
+            "size": [
+              1,
+              2,
+              2
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            4.5,
+            -1,
+            3
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "railings_1",
+          "label": "platform railings",
+          "geometry": {
+            "type": "box",
+            "size": [
+              10,
+              0.2,
+              8
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e64a19",
+            "roughness": 0.5,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            2.5,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_upper_deck_1",
+          "label": "upper deck",
+          "geometry": {
+            "type": "box",
+            "size": [
+              10,
+              0.5,
+              8
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            1.25,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_stairs_1b",
+          "label": "additional stairs",
+          "geometry": {
+            "type": "box",
+            "size": [
+              1,
+              2,
+              2
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            -4.5,
+            -1,
+            -3
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_mid_deck_1",
+          "label": "mid deck",
+          "geometry": {
+            "type": "box",
+            "size": [
+              12,
+              0.5,
+              10
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            1.75,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "stairs_1b",
+          "label": "side stairs",
+          "geometry": {
+            "type": "box",
+            "size": [
+              1,
+              2,
+              3
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            6,
+            -1,
+            4
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_scaffold_1",
+          "label": "scaffold structure",
+          "geometry": {
+            "type": "box",
+            "size": [
+              14,
+              0.3,
+              12
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e64a19",
+            "roughness": 0.5,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            2.2,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "assembly_platform_2",
+      "label": "yellow assembly platform (rear)",
+      "geometry": {
+        "type": "box",
+        "size": [
+          12,
+          4.5,
+          10
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#f7b731",
+        "roughness": 0.6,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        35,
+        17.5,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": [
+        {
+          "id": "stairs_2",
+          "label": "platform stairs",
+          "geometry": {
+            "type": "box",
+            "size": [
+              1,
+              2,
+              2
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            3.5,
+            -1,
+            2.5
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "railings_2",
+          "label": "platform railings",
+          "geometry": {
+            "type": "box",
+            "size": [
+              8,
+              0.2,
+              7
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e64a19",
+            "roughness": 0.5,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            2.5,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_upper_deck_2",
+          "label": "upper deck",
+          "geometry": {
+            "type": "box",
+            "size": [
+              8,
+              0.5,
+              7
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            1.25,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_mid_deck_2",
+          "label": "mid deck (rear)",
+          "geometry": {
+            "type": "box",
+            "size": [
+              10,
+              0.5,
+              8
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            1.75,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "stairs_2b",
+          "label": "side stairs (rear)",
+          "geometry": {
+            "type": "box",
+            "size": [
+              1,
+              2,
+              3
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e6a600",
+            "roughness": 0.6,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            5,
+            -1,
+            3.5
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "platform_scaffold_2",
+          "label": "scaffold structure (rear)",
+          "geometry": {
+            "type": "box",
+            "size": [
+              12,
+              0.3,
+              10
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e64a19",
+            "roughness": 0.5,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0,
+            2.2,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "crane_1",
+      "label": "overhead crane",
+      "geometry": {
+        "type": "box",
+        "size": [
+          40,
+          0.6,
+          1.2
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#c62828",
+        "roughness": 0.5,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        25,
+        27.5,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "crane_2",
+      "label": "overhead crane (rear)",
+      "geometry": {
+        "type": "box",
+        "size": [
+          40,
+          0.6,
+          1.2
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#c62828",
+        "roughness": 0.5,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        25,
+        29.5,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "tool_cart_1",
+      "label": "tool cart",
+      "geometry": {
+        "type": "box",
+        "size": [
+          1.2,
+          0.8,
+          0.7
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#f7c873",
+        "roughness": 0.6,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        10,
+        15.9,
+        -6
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "tool_cart_2",
+      "label": "tool cart",
+      "geometry": {
+        "type": "box",
+        "size": [
+          1.2,
+          0.8,
+          0.7
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#f7c873",
+        "roughness": 0.6,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        15,
+        15.9,
+        -8
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    }
+  ]
+}

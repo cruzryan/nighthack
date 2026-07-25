@@ -1,0 +1,449 @@
+{
+  "meta": {
+    "name": "conveyor demo (synthetic)",
+    "units": "m",
+    "notes": ""
+  },
+  "camera": {
+    "azimuth_deg": 35,
+    "elevation_deg": 22,
+    "distance": 3.3676880114176253,
+    "target": [
+      0.32000000000000006,
+      0.43750000000000006,
+      0.05499999999999994
+    ],
+    "fov_deg": 45
+  },
+  "environment": {
+    "background": "#e7ecf1",
+    "ground": {
+      "color": "#c8cdd3",
+      "size": 12,
+      "visible": true
+    }
+  },
+  "bodies": [
+    {
+      "id": "belt",
+      "label": "",
+      "geometry": {
+        "type": "box",
+        "size": [
+          0.4,
+          0.06,
+          1.6
+        ],
+        "bevel": 0
+      },
+      "material": {
+        "color": "#2b2b2b",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        0,
+        0.5,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": {
+        "type": "conveyor",
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "rate": 0.5,
+        "range": 0.3,
+        "period": 3
+      },
+      "hidden_until_open": false,
+      "children": [
+        {
+          "id": "box1",
+          "label": "",
+          "geometry": {
+            "type": "box",
+            "size": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#b5651d",
+            "roughness": 0.62,
+            "metalness": 0,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "wood"
+          },
+          "position": [
+            0,
+            0.1,
+            -0.6
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "box2",
+          "label": "",
+          "geometry": {
+            "type": "box",
+            "size": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#c0392b",
+            "roughness": 0.45,
+            "metalness": 0,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "plastic"
+          },
+          "position": [
+            0,
+            0.1,
+            -0.1
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        },
+        {
+          "id": "box3",
+          "label": "",
+          "geometry": {
+            "type": "box",
+            "size": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#2e7d5b",
+            "roughness": 0.45,
+            "metalness": 0,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "plastic"
+          },
+          "position": [
+            0,
+            0.1,
+            0.4
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "leg1",
+      "label": "",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.03,
+        "height": 0.47,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#b0b0b0",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        0.16,
+        0.235,
+        -0.7
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "leg2",
+      "label": "",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.03,
+        "height": 0.47,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#b0b0b0",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        -0.16,
+        0.235,
+        -0.7
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "leg3",
+      "label": "",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.03,
+        "height": 0.47,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#b0b0b0",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        0.16,
+        0.235,
+        0.7
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "leg4",
+      "label": "",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.03,
+        "height": 0.47,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#b0b0b0",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        -0.16,
+        0.235,
+        0.7
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": null,
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "roller",
+      "label": "",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.09,
+        "height": 0.44,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#b0b0b0",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        0,
+        0.5,
+        0.82
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        90
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": {
+        "type": "spin",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "rate": 4,
+        "range": 0.3,
+        "period": 3
+      },
+      "hidden_until_open": false,
+      "children": []
+    },
+    {
+      "id": "arm_base",
+      "label": "",
+      "geometry": {
+        "type": "cylinder",
+        "radius": 0.05,
+        "height": 0.35,
+        "bevel": 0
+      },
+      "material": {
+        "color": "#c0392b",
+        "roughness": 0.32,
+        "metalness": 0.9,
+        "opacity": 1,
+        "emissive": "#000000",
+        "kind": "metal"
+      },
+      "position": [
+        0.5,
+        0.68,
+        0
+      ],
+      "rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "joint": {
+        "type": "fixed"
+      },
+      "motion": {
+        "type": "oscillate",
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "rate": 0.25,
+        "range": 55,
+        "period": 2
+      },
+      "hidden_until_open": false,
+      "children": [
+        {
+          "id": "arm",
+          "label": "",
+          "geometry": {
+            "type": "box",
+            "size": [
+              0.34,
+              0.05,
+              0.05
+            ],
+            "bevel": 0
+          },
+          "material": {
+            "color": "#e67e22",
+            "roughness": 0.32,
+            "metalness": 0.9,
+            "opacity": 1,
+            "emissive": "#000000",
+            "kind": "metal"
+          },
+          "position": [
+            0.17,
+            0.17,
+            0
+          ],
+          "rotation_deg": [
+            0,
+            0,
+            0
+          ],
+          "joint": {
+            "type": "fixed"
+          },
+          "motion": null,
+          "hidden_until_open": false,
+          "children": []
+        }
+      ]
+    }
+  ]
+}
